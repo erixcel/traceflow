@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Organized TypeScript File Creation'
+  short_description: 'Create compact, well-scoped TraceFlow files'
+  default_prompt: 'Usa $organized-file-creation para crear o reorganizar un archivo TypeScript siguiendo las reglas de estructura de TraceFlow.'

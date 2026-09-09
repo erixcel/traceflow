@@ -1,0 +1,77 @@
+# Dependencias
+node_modules/
+.npm/
+.pnp
+.pnp.*
+
+# Compilados y paquetes generados
+dist/
+build/
+out/
+*.tgz
+*.tsbuildinfo
+
+# Cachés de herramientas
+.cache/
+.eslintcache
+.stylelintcache
+.vite/
+.turbo/
+.parcel-cache/
+vite.config.*.timestamp-*
+
+# Cobertura y resultados de pruebas
+coverage/
+.nyc_output/
+.jest-cache/
+test-results/
+playwright-report/
+junit.xml
+
+# Variables de entorno y secretos locales
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Logs y reportes de errores
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Archivos temporales y de ejecución
+.temp/
+.tmp/
+temp/
+tmp/
+pids/
+*.pid
+*.pid.lock
+*.seed
+*.swp
+*.swo
+*~
+
+# Editores
+.idea/
+.history/
+*.sublime-project
+*.sublime-workspace
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Sistema operativo
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+Thumbs.db
+Desktop.ini

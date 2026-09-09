@@ -1,0 +1,54 @@
+{
+  "name": "traceflow-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Workspace npm de TraceFlow y TraceFlow Kit",
+  "packageManager": "npm@11.8.0",
+  "workspaces": [
+    "packages/traceflow",
+    "packages/traceflow-kit"
+  ],
+  "scripts": {
+    "clean": "node scripts/clean.script.js",
+    "build": "npm run build:traceflow && npm run build:kit",
+    "build:traceflow": "npm run build --workspace=traceflow",
+    "build:kit": "npm run build --workspace=traceflow-kit",
+    "dev": "npm run build && concurrently -k -n runtime-compiler,kit,studio-web -c yellow,magenta,cyan \"npm run dev:watch --workspace=traceflow\" \"npm run dev:kit --workspace=traceflow-kit\" \"npm run dev:studio --workspace=traceflow-kit\"",
+    "typecheck": "npm run build:traceflow && npm run typecheck --workspace=traceflow && npm run typecheck --workspace=traceflow-kit",
+    "lint": "eslint . --max-warnings=0",
+    "format:all": "prettier --ignore-path .gitignore --write \"packages/**/*.{ts,tsx,css,html,json,md}\" \"scripts/**/*.{js,mjs}\" \"skills/**/*.{md,yaml,yml}\" \"*.{cjs,js,json,md}\" .prettierrc",
+    "format:all:check": "prettier --ignore-path .gitignore --check \"packages/**/*.{ts,tsx,css,html,json,md}\" \"scripts/**/*.{js,mjs}\" \"skills/**/*.{md,yaml,yml}\" \"*.{cjs,js,json,md}\" .prettierrc",
+    "format": "npm run format:all",
+    "format:check": "npm run format:all:check",
+    "test": "npm test --workspace=traceflow",
+    "verify": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build",
+    "pack:check": "npm pack --workspace=traceflow --dry-run && npm pack --workspace=traceflow-kit --dry-run"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@dagrejs/dagre": "^1.1.5",
+    "@eslint/js": "^9.18.0",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.1.16",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.0.4",
+    "@xyflow/react": "^12.8.5",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.18.0",
+    "globals": "^17.0.0",
+    "jest": "^30.0.0",
+    "pg": "^8.23.0",
+    "prettier": "^3.4.2",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "ts-jest": "^29.2.5",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0",
+    "vite": "^7.1.7"
+  }
+}

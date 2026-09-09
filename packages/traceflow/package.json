@@ -1,0 +1,72 @@
+{
+  "name": "traceflow",
+  "version": "0.1.0",
+  "description": "Runtime de trazabilidad para aplicaciones Node.js basado en OpenTelemetry",
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./protocol": {
+      "types": "./dist/protocol.d.ts",
+      "require": "./dist/protocol.js",
+      "default": "./dist/protocol.js"
+    },
+    "./constants": {
+      "types": "./dist/modules/settings/constants/index.d.ts",
+      "require": "./dist/modules/settings/constants/index.js",
+      "default": "./dist/modules/settings/constants/index.js"
+    },
+    "./functions": {
+      "types": "./dist/modules/traces/shared/functions/index.d.ts",
+      "require": "./dist/modules/traces/shared/functions/index.js",
+      "default": "./dist/modules/traces/shared/functions/index.js"
+    },
+    "./types": {
+      "types": "./dist/modules/traces/shared/types/index.d.ts",
+      "require": "./dist/modules/traces/shared/types/index.js",
+      "default": "./dist/modules/traces/shared/types/index.js"
+    },
+    "./package.json": "./package.json",
+    "./pg": {
+      "types": "./dist/pg.d.ts",
+      "require": "./dist/pg.js",
+      "default": "./dist/pg.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "node ../../scripts/clean.script.js packages/traceflow/dist",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "dev:watch": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "jest --config ../../jest.config.cjs --runInBand --passWithNoTests",
+    "test:watch": "jest --watch",
+    "test:cov": "jest --coverage --runInBand",
+    "pack:check": "npm pack --dry-run",
+    "prepack": "npm run build"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "keywords": [
+    "opentelemetry",
+    "tracing",
+    "observability",
+    "nodejs"
+  ],
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/instrumentation-http": "^0.221.0",
+    "@opentelemetry/sdk-node": "^0.221.0",
+    "@opentelemetry/sdk-trace-node": "^2.10.0",
+    "pgsql-ast-parser": "^12.0.2"
+  }
+}
