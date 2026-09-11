@@ -113,6 +113,31 @@ describe('PostgreSQL execution instrumentation', () => {
     expect(querySpans()[0].input).toEqual({ parameters: [7] });
   });
 
+  it('captures SQL text and result rows when capture is configured with statement and result', async () => {
+    const client = instrumentPgClient(new FakeClient(), { capture: { statement: true, result: true } });
+    const sql = 'SELECT * FROM users WHERE id = $1';
+    await runTraceSpan('result request', async () => {
+      await client.query(sql, [7]);
+    });
+    await provider.forceFlush();
+    const query = querySpans()[0];
+    expect(query.attributes['db.query.text']).toBe(sql);
+    expect(query.output).toEqual({ rowCount: 1, rows: [{ id: 7 }] });
+  });
+
+  it('captures all query data when capture is set to true', async () => {
+    const client = instrumentPgClient(new FakeClient(), { capture: true });
+    const sql = 'SELECT * FROM users WHERE id = $1';
+    await runTraceSpan('capture all request', async () => {
+      await client.query(sql, [42]);
+    });
+    await provider.forceFlush();
+    const query = querySpans()[0];
+    expect(query.attributes['db.query.text']).toBe(sql);
+    expect(query.input).toEqual({ parameters: [42] });
+    expect(query.output).toEqual({ rowCount: 1, rows: [{ id: 7 }] });
+  });
+
   it('omits SQL text and parameters by default while still identifying tables', async () => {
     const client = instrumentPgClient(new FakeClient());
     await runTraceSpan('private request', async () => client.query('SELECT * FROM users WHERE token = $1', ['private-token']));

@@ -83,6 +83,20 @@ representan un controller, un service o una transformación.
 
 Los tipos del protocolo están disponibles en `traceflow/protocol`.
 
+Para instrumentar PostgreSQL (`pg` o Drizzle/TypeORM sobre pool), importa `traceflow/pg`. Puedes habilitar la captura de la consulta SQL y sus filas devueltas:
+
+```ts
+import { instrumentPgPool } from 'traceflow/pg';
+
+instrumentPgPool(pool, {
+  capture: {
+    statement: true, // Captura la sentencia SQL
+    parameters: true, // Captura los parámetros en Entrada
+    result: true, // Captura las filas devueltas en Salida (o usa rows: true)
+  },
+});
+```
+
 Para abarcar guards, Passport, controllers y servicios en una sola traza, registra
 el middleware HTTP antes de las rutas. Es compatible con Nest/Express y reutiliza
 un span HTTP automático activo cuando ya existe, por lo que no duplica la raíz:

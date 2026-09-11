@@ -8,7 +8,7 @@ import { DOCUMENTATION_JOURNEY_TRACE } from '../constants/journey-example.consta
 
 interface SelectedExampleSpan {
   span: TraceFlowSpanDto;
-  tab: 'input' | 'output';
+  tab: 'input' | 'output' | 'context';
 }
 
 export function JourneyExampleComponent(): React.JSX.Element {

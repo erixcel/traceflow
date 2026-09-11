@@ -4,7 +4,8 @@ import type { JsonValue } from '../types/json.type';
 export interface DetailsPanelProps {
   span: TraceFlowSpanDto;
   onClose: () => void;
-  initialTab?: 'input' | 'output';
+  initialTab?: 'input' | 'output' | 'context';
+  onTabChange?: (tab: 'input' | 'output' | 'context') => void;
 }
 
 export interface DetailItemProps {

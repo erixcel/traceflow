@@ -10,9 +10,12 @@ import { DatabaseQuerySummaryComponent } from '../components/database-query-summ
 import type { DetailItemProps, DetailsPanelProps, IdRowProps, SectionTitleProps, TraceDataSectionProps } from '../interfaces/details-panel.interface';
 import { useHttpInputStore } from '../stores/http-input.store';
 
-export function DetailsPanelLayout({ span, onClose, initialTab = 'input' }: DetailsPanelProps): React.JSX.Element {
+export function DetailsPanelLayout({ span, onClose, initialTab = 'input', onTabChange }: DetailsPanelProps): React.JSX.Element {
   const httpInputPreferences = useHttpInputStore((state) => state.preferences);
   const [tab, setTab] = useState<'input' | 'output' | 'context'>(initialTab);
+  useEffect(() => {
+    setTab(initialTab);
+  }, [initialTab, span.spanId]);
   const [copied, setCopied] = useState<string | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const onCloseRef = useRef(onClose);
@@ -77,7 +80,10 @@ export function DetailsPanelLayout({ span, onClose, initialTab = 'input' }: Deta
           <button
             key={item}
             aria-pressed={tab === item}
-            onClick={() => setTab(item)}
+            onClick={() => {
+              setTab(item);
+              onTabChange?.(item);
+            }}
             className={`border-b-2 px-3 py-3 text-xs font-semibold ${tab === item ? 'border-pink-500 text-pink-600 dark:text-pink-300' : 'border-transparent text-zinc-500'}`}
           >
             {item === 'input' ? 'Entrada' : item === 'output' ? 'Salida' : 'Contexto'}
@@ -95,7 +101,7 @@ export function DetailsPanelLayout({ span, onClose, initialTab = 'input' }: Deta
               <DatabaseQuerySummaryComponent span={span} appearance="chips" />
             </div>
             {sql ? (
-              <details className="mt-3">
+              <details className="mt-3" open>
                 <summary className="cursor-pointer text-[11px] font-semibold text-amber-800 focus-visible:outline-2 focus-visible:outline-pink-500 dark:text-amber-300">Ver consulta SQL</summary>
                 <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-white/70 p-3 font-mono text-[10px] break-words dark:bg-zinc-950/70">{sql}</pre>
               </details>

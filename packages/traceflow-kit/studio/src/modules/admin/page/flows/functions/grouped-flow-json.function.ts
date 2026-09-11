@@ -21,7 +21,6 @@ export function buildGroupedFlowJson(trace: TraceFlowTraceDto): JsonValue {
       beforeController: model.preconditions.map(journeyValue),
     },
     process: {
-      coordinators: model.coordinators.map(journeyValue),
       groups: model.groups.map((group, index) => ({
         index: index + 1,
         concurrent: group.length > 1,

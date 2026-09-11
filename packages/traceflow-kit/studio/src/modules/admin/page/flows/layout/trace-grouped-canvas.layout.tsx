@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { HttpInputSettingsComponent } from '../components/http-input-settings.component';
 import { JsonViewerComponent } from '../components/json-viewer.component';
 import { GROUPED_FLOW_CONTROL_CLASS } from '../constants/grouped-flow.constant';
-import { GROUPED_FLOW_NODE_TYPES } from '../constants/grouped-node-types.constant';
+import { GROUPED_FLOW_EDGE_TYPES, GROUPED_FLOW_NODE_TYPES } from '../constants/grouped-node-types.constant';
 import { GroupedFlowContext } from '../contexts/grouped-flow.context';
 import { buildGroupedFlowJson } from '../functions/grouped-flow-json.function';
 import { useGroupedFlow } from '../hooks/use-grouped-flow.hook';
@@ -14,7 +14,7 @@ export function TraceGroupedCanvasLayout({ trace, onSelectSpan }: TraceCanvasPro
   const [view, setView] = useState<'flow' | 'json'>('flow');
   const groupedJson = useMemo(() => buildGroupedFlowJson(trace), [trace]);
   return (
-    <GroupedFlowContext.Provider value={{ selectSpan: onSelectSpan, toggleGroup: flow.toggleGroup }}>
+    <GroupedFlowContext.Provider value={{ selectSpan: onSelectSpan, toggleGroup: flow.toggleGroup, openStep: flow.openStep, closeDetail: flow.closeDetail, fit: flow.fit }}>
       <div className="relative min-h-0 flex-1">
         <div className="pointer-events-none absolute inset-x-5 top-3 z-20 flex items-start justify-between gap-4">
           <div className="pointer-events-auto flex min-w-0 items-center gap-3">
@@ -46,12 +46,20 @@ export function TraceGroupedCanvasLayout({ trace, onSelectSpan }: TraceCanvasPro
             <JsonViewerComponent value={groupedJson} label="JSON del flujo agrupado" fill />
           </div>
         ) : (
-          <div className="h-full min-h-0" aria-label="Diagrama de entrada, proceso y salida">
+          <div
+            className="h-full min-h-0 [--flow-edge-label-bg:var(--color-zinc-50)] [--flow-edge-label-text:var(--color-zinc-500)] dark:[--flow-edge-label-bg:var(--color-zinc-900)] dark:[--flow-edge-label-text:var(--color-zinc-400)]"
+            aria-label="Diagrama de entrada, proceso y salida"
+          >
             <div className="pointer-events-none absolute right-5 bottom-4 z-20 flex items-center gap-2">
+              {flow.hasDetails ? (
+                <button className={`${GROUPED_FLOW_CONTROL_CLASS} pointer-events-auto`} onClick={flow.closeDetails}>
+                  Cerrar detalles
+                </button>
+              ) : null}
               <button className={`${GROUPED_FLOW_CONTROL_CLASS} pointer-events-auto disabled:opacity-40`} disabled={!flow.canExpand || Boolean(flow.query.trim())} onClick={flow.toggleAll}>
                 {flow.allExpanded ? 'Contraer grupos' : 'Expandir grupos'}
               </button>
-              <button className={`${GROUPED_FLOW_CONTROL_CLASS} pointer-events-auto`} onClick={flow.fit}>
+              <button className={`${GROUPED_FLOW_CONTROL_CLASS} pointer-events-auto`} onClick={() => flow.fit({ forceFull: true })}>
                 Ajustar vista
               </button>
             </div>
@@ -59,6 +67,7 @@ export function TraceGroupedCanvasLayout({ trace, onSelectSpan }: TraceCanvasPro
               nodes={flow.nodes}
               edges={flow.edges}
               nodeTypes={GROUPED_FLOW_NODE_TYPES}
+              edgeTypes={GROUPED_FLOW_EDGE_TYPES}
               onNodesChange={flow.onNodesChange}
               nodesConnectable={false}
               nodesDraggable={false}
@@ -69,8 +78,6 @@ export function TraceGroupedCanvasLayout({ trace, onSelectSpan }: TraceCanvasPro
               minZoom={0.25}
               maxZoom={1.8}
               panOnDrag
-              fitView
-              fitViewOptions={{ padding: 0.08, maxZoom: 1 }}
               proOptions={{ hideAttribution: true }}
             >
               <Background variant={BackgroundVariant.Dots} gap={24} size={0.7} className="opacity-30 dark:opacity-15" color="#9696a5" />

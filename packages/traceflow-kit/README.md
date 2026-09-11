@@ -72,19 +72,31 @@ componentes; la vista de recorrido no necesita una hoja de estilos manual.
 ## Leer una ejecución
 
 `/admin/flows` abre **Flujo agrupado**, un lienzo de React Flow con tres columnas:
-**Entrada**, **Proceso** y **Salida**. La entrada conserva el controller y los
-servicios que coordinan la primera bifurcación. Cada tarjeta del proceso contiene
-sus llamadas internas, con dos pasos de adelanto y expansión independiente.
-Las conexiones muestran la bifurcación y la llegada al resultado; los intervalos
-solapados indican simultaneidad y los grupos posteriores se conectan con «Luego».
+**Entrada**, **Proceso** y **Salida**. La entrada conserva el controller y el proceso
+muestra sus llamadas directas. Cada servicio contiene su árbol de pasos completo:
+servicios hijos, consultas y métodos permanecen anidados bajo quien los ejecutó.
+La numeración se lee de arriba abajo; los intervalos solapados se agrupan como
+**En paralelo**, y **Después** separa las operaciones posteriores, como crear la
+paginación tras esperar las consultas. Sin tiempos precisos, el solapamiento se
+identifica como estimado.
+
+Al pulsar un paso numerado se abre su tarjeta completa a la derecha, conectada por
+una **flecha discontinua «Detalle»** desde la fila seleccionada. Es una exploración,
+no otra etapa de ejecución: las conexiones del recorrido siguen siendo las mismas.
+Puedes continuar abriendo sus hijos; elegir otro paso sustituye la rama de detalles
+anterior. La × de cada tarjeta cierra ese nivel y sus descendientes, y **Cerrar
+detalles** vuelve al resumen. Los accesos Entrada, Salida y Detalles abren los datos
+capturados en el panel lateral. Esto también funciona con auth y sus consultas.
 Los pasos sin padre conservan sus tarjetas sin inventar conexiones a una respuesta.
 
 Las tarjetas usan un acento distinto según el tipo semántico del nodo:
 controller, service, método, table, validación, transformación, API externa u
 operación personalizada.
 
-Al expandir una tarjeta se recolocan las demás sin cambiar el zoom. **Ajustar vista**
-encuadra todo el lienzo. La búsqueda por método, clase o recurso resalta los grupos
+Al abrir o cerrar detalles se recoloca y encuadra el recorrido para mantener visibles
+las tarjetas. **Contraer pasos** oculta los niveles internos sin quitar las llamadas
+directas ni alterar su orden. **Ajustar vista** encuadra todo el lienzo.
+La búsqueda por método, clase o recurso resalta los grupos
 coincidentes y abre sus pasos, conservando todos los nodos y conexiones.
 **Todos los pasos** mantiene la exploración libre del grafo sin agrupar.
 

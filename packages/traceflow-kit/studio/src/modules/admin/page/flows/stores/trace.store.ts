@@ -13,6 +13,7 @@ export const useTraceStore = create<TraceStore>((set, get) => ({
   error: null,
   query: '',
   statusFilter: 'all',
+  activeTab: 'input',
 
   loadTrace: async (traceId) => {
     try {
@@ -73,6 +74,7 @@ export const useTraceStore = create<TraceStore>((set, get) => ({
   },
 
   setSelectedSpan: (selectedSpan) => set({ selectedSpan }),
+  setActiveTab: (activeTab) => set({ activeTab }),
   setConnectionStatus: (connectionStatus) => set({ connectionStatus }),
   setQuery: (query) => set({ query }),
   setStatusFilter: (statusFilter) => set({ statusFilter }),

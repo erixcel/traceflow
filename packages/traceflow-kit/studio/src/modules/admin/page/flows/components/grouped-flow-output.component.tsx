@@ -7,12 +7,21 @@ import { getTraceDataSections } from '../functions/trace-data.function';
 import type { GroupedCardProps } from '../interfaces/grouped-flow.interface';
 
 export function GroupedFlowOutputComponent({ data }: GroupedCardProps): React.JSX.Element {
-  const { selectSpan } = useContext(GroupedFlowContext);
+  const { selectSpan, fit } = useContext(GroupedFlowContext);
   const span = data.node?.span;
   const output = span ? getTraceDataSections(span).output : undefined;
   const fields = output && typeof output === 'object' && !Array.isArray(output) ? Object.entries(output) : [];
   return (
-    <div className="p-4">
+    <div
+      className="cursor-pointer p-4"
+      onClick={(e) => {
+        if ((e.target as HTMLElement).closest('button, details')) return;
+        if (span) {
+          selectSpan(span);
+          fit({ cardIds: ['grouped-output'] });
+        }
+      }}
+    >
       <h3 className="text-[15px] font-semibold">
         {!data.isComplete ? 'Traza incompleta' : data.traceStatus === 'error' ? 'Terminó con un error' : data.traceStatus === 'success' ? 'Ejecución completada' : 'Estado sin confirmar'}
       </h3>
@@ -37,7 +46,13 @@ export function GroupedFlowOutputComponent({ data }: GroupedCardProps): React.JS
           <span className="ml-1.5 font-sans text-[10px] font-normal text-zinc-400">total</span>
         </span>
         {span ? (
-          <button className={GROUPED_FLOW_LINK_CLASS} onClick={() => selectSpan(span, 'output')}>
+          <button
+            className={GROUPED_FLOW_LINK_CLASS}
+            onClick={() => {
+              selectSpan(span, 'output');
+              fit({ cardIds: ['grouped-output'] });
+            }}
+          >
             Ver salida ↗
           </button>
         ) : null}

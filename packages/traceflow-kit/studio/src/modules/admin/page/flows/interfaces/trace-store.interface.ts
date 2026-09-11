@@ -11,6 +11,8 @@ export interface TraceStore {
   error: string | null;
   query: string;
   statusFilter: TraceFlowTraceSummaryDto['status'] | 'all';
+  activeTab: 'input' | 'output' | 'context';
+  setActiveTab: (tab: 'input' | 'output' | 'context') => void;
   loadTrace: (traceId: string) => Promise<TraceFlowTraceDto | null>;
   refreshTraces: () => Promise<void>;
   selectTrace: (traceId: string) => Promise<void>;

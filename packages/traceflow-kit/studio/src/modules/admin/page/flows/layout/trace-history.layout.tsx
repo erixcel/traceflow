@@ -51,7 +51,7 @@ export function TraceHistoryLayout(): React.JSX.Element {
               <circle cx="5.75" cy="12" r="1.25" />
             </svg>
             <select
-              className="h-7 min-w-0 flex-1 cursor-pointer appearance-none border-0 bg-transparent pr-5 text-[11px] text-zinc-600 outline-none dark:text-zinc-300"
+              className="h-7 min-w-0 flex-1 cursor-pointer appearance-none border-0 bg-transparent pr-5 text-[11px] text-zinc-600 [color-scheme:light] outline-none dark:text-zinc-300 dark:[color-scheme:dark] [&>option]:bg-zinc-50 [&>option]:text-zinc-600 dark:[&>option]:bg-zinc-900 dark:[&>option]:text-zinc-300"
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
               aria-label="Filtrar por estado"

@@ -2,23 +2,25 @@ import { TRACEFLOW_DEMO_URL } from '../constants/demo.constant';
 import { useTraceStore } from '../stores/trace.store';
 import { DetailsPanelLayout } from './details-panel.layout';
 import { TraceHistoryLayout } from './trace-history.layout';
-import { useState } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import type { TraceCanvasProps } from '../interfaces/trace-canvas.interface';
 import { TraceGroupedCanvasLayout } from './trace-grouped-canvas.layout';
 import { hasMonotonicTiming } from '../functions/execution-flow.function';
 
 export function FlowsLayout(): React.JSX.Element {
-  const [detailTab, setDetailTab] = useState<'input' | 'output'>('input');
   const activeTrace = useTraceStore((state) => state.activeTrace);
   const selectedSpan = useTraceStore((state) => state.selectedSpan);
+  const activeTab = useTraceStore((state) => state.activeTab);
   const connectionStatus = useTraceStore((state) => state.connectionStatus);
   const error = useTraceStore((state) => state.error);
   const refreshTraces = useTraceStore((state) => state.refreshTraces);
   const setSelectedSpan = useTraceStore((state) => state.setSelectedSpan);
+  const setActiveTab = useTraceStore((state) => state.setActiveTab);
   const setError = useTraceStore((state) => state.setError);
-  const selectSpan: TraceCanvasProps['onSelectSpan'] = (span, tab = 'input') => {
-    setDetailTab(tab);
+  const selectSpan: TraceCanvasProps['onSelectSpan'] = (span, tab) => {
+    if (tab) {
+      setActiveTab(tab);
+    }
     setSelectedSpan(span);
   };
 
@@ -98,7 +100,7 @@ export function FlowsLayout(): React.JSX.Element {
           </div>
         )}
       </section>
-      {selectedSpan ? <DetailsPanelLayout key={`${selectedSpan.spanId}-${detailTab}`} span={selectedSpan} initialTab={detailTab} onClose={() => setSelectedSpan(null)} /> : null}
+      {selectedSpan ? <DetailsPanelLayout key={selectedSpan.spanId} span={selectedSpan} initialTab={activeTab} onTabChange={setActiveTab} onClose={() => setSelectedSpan(null)} /> : null}
     </div>
   );
 }

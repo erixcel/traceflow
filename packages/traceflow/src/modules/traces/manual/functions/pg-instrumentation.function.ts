@@ -4,7 +4,7 @@ import { TRACEFLOW_ATTRIBUTE_KEYS, TRACEFLOW_CAPTURE_ATTRIBUTE_KEYS } from '../.
 import { TRACEFLOW_TRACER } from '../../shared/constants/trace-span.constant';
 import { monotonicUnixTime } from '../../shared/functions/monotonic-time.function';
 import { toJsonSerializable } from '../../shared/functions/json.function';
-import type { TracePgOptions } from '../interfaces/pg-instrumentation.interface';
+import type { TracePgCaptureOptions, TracePgOptions } from '../interfaces/pg-instrumentation.interface';
 import { instrumentedPgClients, instrumentedPgPools } from '../pg-instrumentation.runtime';
 import { getPgQueryMetadata } from './pg-query.function';
 
@@ -58,14 +58,16 @@ export function instrumentPgClient<T extends object>(client: T, options: TracePg
         'db.tables': metadata.tables.slice(0, 200).map((table) => table.slice(0, 4096)),
         'traceflow.db.tables.status': metadata.status,
       });
-      if (options.capture?.statement) span.setAttribute('db.query.text', sql.slice(0, 4096));
+      const captureConfig: TracePgCaptureOptions =
+        typeof options.capture === 'boolean' ? { statement: options.capture, parameters: options.capture, result: options.capture } : (options.capture ?? {});
+      if (captureConfig.statement) span.setAttribute('db.query.text', sql.slice(0, 4096));
       const parameters: unknown = Array.isArray(args[1]) ? args[1] : queryObject ? Reflect.get(queryObject, 'values') : undefined;
-      if (options.capture?.parameters && parameters !== undefined) span.setAttribute(TRACEFLOW_CAPTURE_ATTRIBUTE_KEYS.input, JSON.stringify(toJsonSerializable({ parameters })));
+      if (captureConfig.parameters && parameters !== undefined) span.setAttribute(TRACEFLOW_CAPTURE_ATTRIBUTE_KEYS.input, JSON.stringify(toJsonSerializable({ parameters })));
       let ended = false;
       const finish = (error: unknown, result?: unknown): void => {
         if (ended) return;
         ended = true;
-        finishPgSpan(span, error, result);
+        finishPgSpan(span, error, result, captureConfig);
       };
       const finalArg = args.at(-1);
       const configCallback: unknown = queryObject ? Reflect.get(queryObject, 'callback') : undefined;
@@ -105,7 +107,7 @@ export function instrumentPgClient<T extends object>(client: T, options: TracePg
   return client;
 }
 
-function finishPgSpan(span: Span, error: unknown, result: unknown): void {
+function finishPgSpan(span: Span, error: unknown, result: unknown, captureConfig: TracePgCaptureOptions = {}): void {
   if (error) {
     const exception = error instanceof Error ? error : new Error(String(error));
     span.recordException(exception, monotonicUnixTime());
@@ -113,7 +115,20 @@ function finishPgSpan(span: Span, error: unknown, result: unknown): void {
   } else {
     span.setStatus({ code: SpanStatusCode.OK });
     const rowCount: unknown = result && typeof result === 'object' ? Reflect.get(result, 'rowCount') : undefined;
-    if (typeof rowCount === 'number') span.setAttribute(TRACEFLOW_CAPTURE_ATTRIBUTE_KEYS.output, JSON.stringify({ rowCount }));
+    const shouldCaptureResult = captureConfig.result ?? captureConfig.rows;
+    if (shouldCaptureResult && result !== undefined) {
+      const outputData: Record<string, unknown> = {};
+      if (typeof rowCount === 'number') outputData.rowCount = rowCount;
+      if (result && typeof result === 'object' && 'rows' in result) {
+        const rows: unknown = Reflect.get(result, 'rows');
+        outputData.rows = toJsonSerializable(rows);
+      } else {
+        outputData.rows = toJsonSerializable(result);
+      }
+      span.setAttribute(TRACEFLOW_CAPTURE_ATTRIBUTE_KEYS.output, JSON.stringify(outputData));
+    } else if (typeof rowCount === 'number') {
+      span.setAttribute(TRACEFLOW_CAPTURE_ATTRIBUTE_KEYS.output, JSON.stringify({ rowCount }));
+    }
   }
   span.end(monotonicUnixTime());
 }

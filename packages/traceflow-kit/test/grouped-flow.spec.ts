@@ -1,5 +1,7 @@
 import type { TraceFlowSpanDto, TraceFlowTraceDto } from 'traceflow/protocol';
-import { buildGroupedFlowGraph, buildGroupedFlowModel } from '../studio/src/modules/admin/page/flows/functions/grouped-flow.function';
+import { buildGroupedFlowGraph, buildGroupedFlowModel, toggleGroupedDetail } from '../studio/src/modules/admin/page/flows/functions/grouped-flow.function';
+import { groupConcurrentSpans } from '../studio/src/modules/admin/page/flows/functions/execution-flow.function';
+import { buildGroupedFlowJson } from '../studio/src/modules/admin/page/flows/functions/grouped-flow-json.function';
 import { descendants } from '../studio/src/modules/admin/page/flows/functions/journey.function';
 import type { GroupedCardNode } from '../studio/src/modules/admin/page/flows/types/grouped-flow.type';
 
@@ -57,22 +59,20 @@ describe('grouped execution graph', () => {
   it('places every observed span exactly once and renders the controller service as a process card', () => {
     const data = dashboard();
     const model = buildGroupedFlowModel(data);
-    expect(model.coordinators.map((node) => node.span.spanId)).toEqual(['coordinator']);
-    expect(model.branches.map((node) => node.span.spanId)).toEqual(['bath', 'income', 'treatment']);
-    const represented = [model.entry!.span, ...model.coordinators.map((node) => node.span), ...model.branches.flatMap((node) => [node.span, ...descendants(node)])];
+    expect(model.branches.map((node) => node.span.spanId)).toEqual(['coordinator']);
+    const represented = [model.entry!.span, ...model.branches.flatMap((node) => [node.span, ...descendants(node)])];
     expect(represented.map((item) => item.spanId).sort()).toEqual(data.spans.map((item) => item.spanId).sort());
     const graph = buildGroupedFlowGraph(data);
-    expect(graph.nodes.filter((node) => node.type === 'groupedCard')).toHaveLength(6);
-    expect(graph.nodes.find((node) => node.id === 'coordinator')).toMatchObject({ data: { kind: 'process', continuesInFlow: true, node: { children: [] } } });
+    expect(graph.nodes.filter((node) => node.type === 'groupedCard')).toHaveLength(3);
+    expect((graph.nodes.find((node) => node.id === 'coordinator') as GroupedCardNode).data.node?.children.map((node) => node.span.spanId)).toEqual(['bath', 'income', 'treatment']);
     expect(graph.edges.filter((edge) => edge.source === 'grouped-entry').map((edge) => edge.target)).toEqual(['coordinator']);
-    expect(graph.edges.filter((edge) => edge.source === 'coordinator').map((edge) => edge.target)).toEqual(['bath', 'income', 'treatment']);
-    expect(graph.edges.filter((edge) => edge.target === 'grouped-output')).toHaveLength(3);
+    expect(graph.edges.filter((edge) => edge.source === 'coordinator').map((edge) => edge.target)).toEqual(['grouped-output']);
+    expect(graph.edges.filter((edge) => edge.target === 'grouped-output')).toHaveLength(1);
   });
 
   it('keeps a single chain inside one process card and handles a root without children', () => {
     const data = trace([span('entry', null), span('service', 'entry'), span('repo', 'service', { type: 'table' })]);
     const model = buildGroupedFlowModel(data);
-    expect(model.coordinators).toEqual([]);
     expect(model.branches.map((node) => node.span.spanId)).toEqual(['service']);
     const serviceCard = buildGroupedFlowGraph(data).nodes.find((node) => node.type === 'groupedCard' && node.id === 'service') as GroupedCardNode | undefined;
     expect(serviceCard?.data.node?.children.map((node) => node.span.spanId)).toEqual(['repo']);
@@ -122,13 +122,15 @@ describe('grouped execution graph', () => {
     const result = buildGroupedFlowGraph(data, new Set(), 'pet');
     expect(result.nodes.map((node) => node.id)).toEqual(baseline.nodes.map((node) => node.id));
     expect(result.edges.map((edge) => edge.id)).toEqual(baseline.edges.map((edge) => edge.id));
-    expect(result.nodes.find((node) => node.id === 'bath')?.data).toMatchObject({ expanded: true, highlighted: true });
-    expect(result.nodes.find((node) => node.id === 'income')?.data.highlighted).toBe(false);
+    expect(result.nodes.find((node) => node.id === 'coordinator')?.data).toMatchObject({ expanded: true, highlighted: true });
+    expect(result.nodes.find((node) => node.id === 'coordinator')?.data.matchedIds).toEqual(new Set(['pet', 'bath', 'coordinator', 'controller']));
     expect(buildGroupedFlowGraph(data, new Set(), 'nothing').nodes.filter((node) => node.type === 'groupedCard' && node.data.highlighted)).toEqual([]);
   });
 
   it('repositions neighboring cards when an expanded card grows, and recenters entry and output', () => {
     const data = dashboard();
+    for (const item of data.spans) if (item.parentSpanId === 'coordinator') item.parentSpanId = 'controller';
+    data.spans = data.spans.filter((item) => item.spanId !== 'coordinator');
     const expanded = buildGroupedFlowGraph(
       data,
       new Set(['bath']),
@@ -153,7 +155,8 @@ describe('grouped execution graph', () => {
     data.status = 'error';
     data.spans.find((item) => item.spanId === 'bath')!.status = 'error';
     const graph = buildGroupedFlowGraph(data);
-    expect(graph.edges.filter((edge) => edge.target === 'grouped-output').map((edge) => edge.source)).toEqual(['bath']);
+    expect(graph.edges.filter((edge) => edge.target === 'grouped-output').map((edge) => edge.source)).toEqual(['coordinator']);
+    expect(graph.edges.find((edge) => edge.target === 'grouped-output')?.style?.stroke).toBe('#e4667d');
   });
 
   it('marks incomplete output connections without silently completing the trace', () => {
@@ -177,8 +180,64 @@ describe('grouped execution graph', () => {
     const model = buildGroupedFlowModel(data);
     expect(model.entry?.span.spanId).toBe('controller');
     expect(model.preconditions.map((node) => node.span.spanId)).toEqual(['auth']);
-    expect(model.coordinators.map((node) => node.span.spanId)).toEqual(['coordinator']);
-    expect(model.branches.map((node) => node.span.spanId)).toEqual(['bath', 'income']);
-    expect(buildGroupedFlowGraph(data).nodes.filter((node) => node.type === 'groupedCard')).toHaveLength(5);
+    expect(model.branches.map((node) => node.span.spanId)).toEqual(['coordinator']);
+    expect(buildGroupedFlowGraph(data).nodes.filter((node) => node.type === 'groupedCard')).toHaveLength(3);
+    const graph = buildGroupedFlowGraph(data, new Set(), '', new Map(), [{ ownerId: 'grouped-entry', spanId: 'auth' }]);
+    const auth = graph.nodes.find((node) => node.id === 'detail-auth') as GroupedCardNode;
+    expect(auth.data.node?.children.map((node) => node.span.spanId)).toEqual(['user']);
+    expect(auth.position.x).toBeLessThan(graph.nodes.find((node) => node.id === 'coordinator')!.position.x);
+    expect(graph.edges.find((edge) => edge.id === 'inspect-grouped-entry-auth')).toMatchObject({ sourceHandle: 'step-auth', target: 'detail-auth' });
+  });
+
+  it('keeps pagination after the parallel queries inside the same service and in JSON', () => {
+    const data = dashboard();
+    data.spans.push(span('pagination', 'coordinator', { type: 'method', startedAt: '2026-01-01T00:00:00.011Z', endedAt: '2026-01-01T00:00:00.012Z' }));
+    const service = buildGroupedFlowGraph(data).nodes.find((node) => node.id === 'coordinator') as GroupedCardNode;
+    expect(groupConcurrentSpans(service.data.node!.children.map((node) => node.span)).map((group) => group.map((item) => item.spanId))).toEqual([['bath', 'income', 'treatment'], ['pagination']]);
+    expect(service.data.node!.children[0]?.children[0]?.span.spanId).toBe('pet');
+    const json = JSON.stringify(buildGroupedFlowJson(data));
+    expect(json.match(/"spanId":"pet"/g)).toHaveLength(1);
+    expect(json.match(/"spanId":"pagination"/g)).toHaveLength(1);
+  });
+
+  it('opens a complete card to the right with a dashed inspection edge, preserving execution edges', () => {
+    const data = dashboard();
+    const baseline = buildGroupedFlowGraph(data);
+    const graph = buildGroupedFlowGraph(data, new Set(), '', new Map(), [{ ownerId: 'coordinator', spanId: 'bath' }]);
+    const parent = graph.nodes.find((node) => node.id === 'coordinator')!;
+    const detail = graph.nodes.find((node) => node.id === 'detail-bath') as GroupedCardNode;
+    expect(parent.data.openedSpanId).toBe('bath');
+    expect(detail.data).toMatchObject({ detail: true, node: { span: { spanId: 'bath' } } });
+    expect(detail.data.node!.children.map((node) => node.span.spanId)).toEqual(['pet']);
+    expect(detail.position.x).toBeGreaterThan(parent.position.x + 328);
+    expect(graph.edges.find((edge) => edge.id === 'inspect-coordinator-bath')).toMatchObject({ sourceHandle: 'step-bath', target: 'detail-bath', style: { strokeDasharray: '5 5' } });
+    expect(graph.edges.filter((edge) => !edge.id.startsWith('inspect-')).map((edge) => [edge.source, edge.target])).toEqual(baseline.edges.map((edge) => [edge.source, edge.target]));
+    expect(graph.edges.some((edge) => edge.source === 'detail-bath' && edge.target === 'grouped-output')).toBe(false);
+    expect(graph.edges.find((edge) => edge.target === 'grouped-output')?.type).toBe('groupedReturn');
+  });
+
+  it('drills deeper, switches siblings and closes a branch without orphaned detail cards', () => {
+    const first = toggleGroupedDetail([], 'coordinator', 'bath');
+    const second = toggleGroupedDetail(first, 'detail-bath', 'pet');
+    const graph = buildGroupedFlowGraph(dashboard(), new Set(), '', new Map(), second);
+    expect(graph.nodes.filter((node) => node.data.detail).map((node) => node.id)).toEqual(['detail-bath', 'detail-pet']);
+    expect(graph.edges.find((edge) => edge.target === 'detail-pet')?.source).toBe('detail-bath');
+    expect(toggleGroupedDetail(second, 'coordinator', 'income')).toEqual([{ ownerId: 'coordinator', spanId: 'income' }]);
+    expect(toggleGroupedDetail(second, 'coordinator', 'bath')).toEqual([]);
+    expect(buildGroupedFlowGraph(dashboard(), new Set(), '', new Map(), [{ ownerId: 'coordinator', spanId: 'missing' }]).nodes.some((node) => node.data.detail)).toBe(false);
+  });
+
+  it('places the execution rail below tall details and keeps inspection identity when filtering', () => {
+    const path = [{ ownerId: 'coordinator', spanId: 'bath' }];
+    const dimensions = new Map([['detail-bath', { width: 328, height: 900 }]]);
+    const graph = buildGroupedFlowGraph(dashboard(), new Set(), '', dimensions, path);
+    const detail = graph.nodes.find((node) => node.id === 'detail-bath')!;
+    const railY = graph.edges.find((edge) => edge.type === 'groupedReturn')!.data!.railY as number;
+    expect(railY).toBeGreaterThan(detail.position.y + 900);
+    expect(graph.bounds.height).toBeGreaterThan(railY);
+    const filtered = buildGroupedFlowGraph(dashboard(), new Set(), 'pet', dimensions, path);
+    expect(filtered.nodes.map((node) => node.id)).toEqual(graph.nodes.map((node) => node.id));
+    expect(filtered.edges.map((edge) => edge.id)).toEqual(graph.edges.map((edge) => edge.id));
+    expect(filtered.nodes.find((node) => node.id === 'detail-bath')?.data.highlighted).toBe(true);
   });
 });

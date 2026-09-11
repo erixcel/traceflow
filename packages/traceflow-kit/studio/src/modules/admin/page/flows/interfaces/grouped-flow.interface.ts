@@ -8,7 +8,6 @@ export interface GroupedFlowModel {
   request: JourneyNode | null;
   entry: JourneyNode | null;
   preconditions: JourneyNode[];
-  coordinators: JourneyNode[];
   branches: JourneyNode[];
   groups: JourneyNode[][];
   unobserved: TraceFlowNodeDefinitionDto[];
@@ -16,11 +15,13 @@ export interface GroupedFlowModel {
 }
 
 export interface GroupedCardData extends Record<string, unknown> {
+  cardId: string;
+  detail: boolean;
+  openedSpanId: string | undefined;
   kind: GroupedCardKind;
   request: JourneyNode | null;
   node: JourneyNode | null;
   preconditions: JourneyNode[];
-  continuesInFlow: boolean;
   expanded: boolean;
   query: string;
   highlighted: boolean;
@@ -53,14 +54,32 @@ export interface GroupedStatusProps {
   status: TraceFlowStatus;
 }
 
+export interface FitViewOptions {
+  cardIds?: string[];
+  duration?: number;
+  forceFull?: boolean;
+}
+
 export interface GroupedFlowActions {
   selectSpan: TraceCanvasProps['onSelectSpan'];
   toggleGroup: (spanId: string) => void;
+  openStep: (ownerId: string, spanId: string) => void;
+  closeDetail: (cardId: string) => void;
+  fit: (options?: number | FitViewOptions) => void;
+}
+
+export interface GroupedDetailSelection {
+  ownerId: string;
+  spanId: string;
 }
 
 export interface GroupedStepsProps {
+  ownerId: string;
+  openedSpanId: string | undefined;
+  prefix?: string;
   nodes: JourneyNode[];
   query: string;
   matchedIds: Set<string>;
   compact?: boolean;
+  nested?: boolean;
 }
