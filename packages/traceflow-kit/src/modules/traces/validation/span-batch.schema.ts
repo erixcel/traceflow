@@ -12,7 +12,7 @@ const attributeValueSchema = z.union([
   z.array(z.number().finite()).max(200),
   z.array(z.boolean()).max(200),
 ]);
-const nodeTypeSchema = z.enum(['controller', 'service', 'method', 'table', 'validation', 'transformation', 'external-api', 'custom']);
+const nodeTypeSchema = z.enum(['controller', 'service', 'method', 'table', 'validation', 'transformation', 'external-api', 'http', 'custom']);
 const flowIdSchema = z.string().trim().min(1).max(200);
 const flowSchema = z
   .object({

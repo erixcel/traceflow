@@ -9,6 +9,13 @@ export const CARD_GUIDES: readonly CardGuide[] = [
     interaction: 'Abre la entrada HTTP o selecciona un paso previo para inspeccionar sus datos.',
   },
   {
+    type: 'http',
+    purpose: 'Captura la petición HTTP entrante de forma interna a través del middleware de TraceFlow.',
+    placement: 'Actúa como envoltorio raíz en la columna Entrada.',
+    content: 'Método, ruta, headers, query params, body, IP y secciones del protocolo HTTP.',
+    interaction: 'Usa “Ver datos HTTP” en la tarjeta de Entrada para inspeccionar la carga de la petición.',
+  },
+  {
     type: 'service',
     purpose: 'Representa una unidad de negocio o coordinación ejecutada por la aplicación.',
     placement: 'Tiene una tarjeta propia. Si llama a otro service, el service descendiente abre una tarjeta nueva.',

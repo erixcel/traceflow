@@ -2,7 +2,7 @@
 export type TraceFlowStatus = 'unset' | 'success' | 'error';
 
 /** Categorías visuales y semánticas de un nodo trazado. */
-export type TraceFlowNodeType = 'controller' | 'service' | 'method' | 'table' | 'validation' | 'transformation' | 'external-api' | 'custom';
+export type TraceFlowNodeType = 'controller' | 'service' | 'method' | 'table' | 'validation' | 'transformation' | 'external-api' | 'http' | 'custom';
 
 /** Valores permitidos como atributos de un span. */
 export type TraceFlowAttributeValue = string | number | boolean | string[] | number[] | boolean[];

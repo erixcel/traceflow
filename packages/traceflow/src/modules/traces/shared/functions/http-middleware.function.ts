@@ -130,7 +130,7 @@ function captureHttpRequest(span: Span, request: TraceFlowHttpRequest, capture: 
 }
 
 function markHttpRequestSpan(span: Span, request: TraceFlowHttpRequest, monotonic: boolean): void {
-  span.setAttribute(TRACEFLOW_ATTRIBUTE_KEYS.nodeType, 'custom');
+  span.setAttribute(TRACEFLOW_ATTRIBUTE_KEYS.nodeType, 'http');
   span.setAttribute('traceflow.http.request_root', true);
   span.setAttribute('traceflow.timing.clock', monotonic ? 'monotonic' : 'opentelemetry');
   span.setAttribute('http.request.method', request.method?.toUpperCase() || 'HTTP');

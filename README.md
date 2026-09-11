@@ -147,10 +147,10 @@ startTraceFlow({
 ```
 
 La instrumentación HTTP se realiza sobre la capa de Node.js, por lo que no es
-necesario registrar un plugin distinto para NestJS, Express o Fastify. Para
-detalles específicos de un framework (por ejemplo, nombres exactos de
-controladores) se puede añadir una integración en el futuro sin contaminar el
-núcleo.
+necesario registrar un plugin distinto para NestJS, Express o Fastify. Cuando se usa
+`createTraceFlowHttpMiddleware`, la petición entrante se marca internamente con el tipo
+de nodo `http` de forma automática, sin requerir decorarla en el código de tu aplicación,
+enlazándose directamente con el controller correspondiente (`@Trace({ type: 'controller' })`).
 
 ## Visualizar trazas
 

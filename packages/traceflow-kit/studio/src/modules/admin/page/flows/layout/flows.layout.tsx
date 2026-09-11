@@ -100,7 +100,17 @@ export function FlowsLayout(): React.JSX.Element {
           </div>
         )}
       </section>
-      {selectedSpan ? <DetailsPanelLayout key={selectedSpan.spanId} span={selectedSpan} initialTab={activeTab} onTabChange={setActiveTab} onClose={() => setSelectedSpan(null)} /> : null}
+      {selectedSpan ? (
+        <DetailsPanelLayout
+          key={selectedSpan.spanId}
+          span={selectedSpan}
+          initialTab={activeTab}
+          onTabChange={setActiveTab}
+          onClose={() => {
+            setSelectedSpan(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

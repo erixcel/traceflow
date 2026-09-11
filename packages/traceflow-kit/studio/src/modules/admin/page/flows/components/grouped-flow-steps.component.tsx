@@ -41,7 +41,9 @@ export function GroupedFlowStepsComponent({ nodes, ownerId, openedSpanId, query,
                       type="button"
                       onClick={() => {
                         openStep(ownerId, span.spanId);
-                        selectSpan(span);
+                        if (!selected) {
+                          selectSpan(span);
+                        }
                       }}
                       aria-label={`${selected ? 'Cerrar' : 'Abrir'} paso ${label}: ${span.name}`}
                       aria-expanded={selected}

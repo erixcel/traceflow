@@ -7,38 +7,42 @@ import { filterHttpInput } from '../functions/http-input.function';
 import { getTraceDataSections } from '../functions/trace-data.function';
 import { JsonViewerComponent } from '../components/json-viewer.component';
 import { DatabaseQuerySummaryComponent } from '../components/database-query-summary.component';
+import { DETAILS_PANEL_ERROR_THEME, DETAILS_PANEL_OUTPUT_THEME, DETAILS_PANEL_TYPE_THEMES, GROUPED_FLOW_TYPE_LABELS } from '../constants/grouped-flow.constant';
 import type { DetailItemProps, DetailsPanelProps, IdRowProps, SectionTitleProps, TraceDataSectionProps } from '../interfaces/details-panel.interface';
 import { useHttpInputStore } from '../stores/http-input.store';
 
 export function DetailsPanelLayout({ span, onClose, initialTab = 'input', onTabChange }: DetailsPanelProps): React.JSX.Element {
   const httpInputPreferences = useHttpInputStore((state) => state.preferences);
-  const [tab, setTab] = useState<'input' | 'output' | 'context'>(initialTab);
+  const isOutput = span.spanId === 'output-result' || span.attributes['traceflow.is_output'] === true;
+  const effectiveInitialTab = isOutput ? 'output' : initialTab;
+  const [tab, setTab] = useState<'input' | 'output' | 'context'>(effectiveInitialTab);
   useEffect(() => {
-    setTab(initialTab);
-  }, [initialTab, span.spanId]);
+    setTab(effectiveInitialTab);
+  }, [effectiveInitialTab, span.spanId]);
   const [copied, setCopied] = useState<string | null>(null);
-  const closeRef = useRef<HTMLButtonElement>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   useEffect(() => {
-    const previousFocus = document.activeElement;
-    closeRef.current?.focus();
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onCloseRef.current();
     };
     document.addEventListener('keydown', handleKey);
     return () => {
       document.removeEventListener('keydown', handleKey);
-      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
     };
   }, []);
   const data = useMemo(() => getTraceDataSections(span), [span]);
   const requestRoot = span.attributes['traceflow.http.request_root'] === true;
   const visibleInput = requestRoot ? filterHttpInput(data.input, httpInputPreferences) : data.input;
-  const methodDescription = requestRoot ? `${String(span.attributes['http.request.method'] ?? 'HTTP')} ${String(span.attributes['url.path'] ?? span.name)}` : formatMethodLabel(span);
+  const methodDescription = requestRoot
+    ? `${String(span.attributes['http.request.method'] ?? 'HTTP')} ${String(span.attributes['url.path'] ?? span.name)}`
+    : isOutput
+      ? `HTTP ${String(span.attributes['http.response.status_code'] ?? (span.status === 'error' ? 500 : 200))} · ${span.status === 'success' ? 'Completado' : 'Finalizado'}`
+      : formatMethodLabel(span);
   const databaseQuery = isDatabaseQuery(span);
   const panelTitle = databaseQuery ? (getDatabaseOperation(span) ?? span.methodName ?? 'Consulta') : span.name;
   const sql = databaseQuery && typeof span.attributes['db.query.text'] === 'string' ? span.attributes['db.query.text'] : null;
+  const theme = span.status === 'error' ? DETAILS_PANEL_ERROR_THEME : isOutput ? DETAILS_PANEL_OUTPUT_THEME : (DETAILS_PANEL_TYPE_THEMES[span.type] ?? DETAILS_PANEL_TYPE_THEMES.custom);
 
   const copy = async (label: string, value: string): Promise<void> => {
     try {
@@ -53,16 +57,20 @@ export function DetailsPanelLayout({ span, onClose, initialTab = 'input', onTabC
   return (
     <aside
       aria-label={`Detalles de ${panelTitle}`}
-      className={`absolute top-0 right-0 z-30 flex h-full w-[min(26rem,92vw)] flex-col border-l bg-white/98 shadow-[-20px_0_50px_rgba(39,43,55,0.13)] backdrop-blur-xl dark:bg-zinc-950/98 dark:shadow-[-28px_0_70px_rgba(0,0,0,0.5)] ${span.status === 'success' ? 'border-emerald-500/40' : span.status === 'error' ? 'border-rose-500/40' : 'border-zinc-300 dark:border-zinc-700'}`}
+      className={`absolute top-0 right-0 z-30 flex h-full w-[min(26rem,92vw)] flex-col border-l bg-white/98 shadow-[-20px_0_50px_rgba(39,43,55,0.13)] backdrop-blur-xl dark:bg-zinc-950/98 dark:shadow-[-28px_0_70px_rgba(0,0,0,0.5)] ${theme.borderClass}`}
     >
-      <header className="flex items-start justify-between border-b border-zinc-200 px-5 py-5 dark:border-zinc-800">
+      <header className={`flex items-start justify-between border-b px-5 py-4 ${theme.headerClass}`}>
         <div className="min-w-0">
-          <span className={statusBadgeClass(span.status)}>{span.status}</span>
-          <h2 className="mt-2.5 truncate text-lg font-bold tracking-tight">{panelTitle}</h2>
+          <div className="flex items-center gap-2">
+            <span className={statusBadgeClass(span.status)}>{span.status}</span>
+            <span className={`inline-flex h-5 items-center rounded-full border px-2 text-[9px] font-bold tracking-wide uppercase ${theme.typeBadgeClass}`}>
+              {isOutput ? 'RESULTADO' : (GROUPED_FLOW_TYPE_LABELS[span.type] ?? span.type)}
+            </span>
+          </div>
+          <h2 className="mt-2 truncate text-lg font-bold tracking-tight">{panelTitle}</h2>
         </div>
         <button
-          ref={closeRef}
-          className="grid size-8 shrink-0 place-items-center rounded-xl border border-zinc-200 bg-zinc-50 text-lg text-zinc-500 transition hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+          className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-xl border border-black/10 bg-white/60 text-lg text-zinc-600 transition hover:bg-white focus:outline-none focus-visible:outline-2 focus-visible:outline-pink-500 dark:border-white/10 dark:bg-zinc-900/60 dark:text-zinc-300 dark:hover:bg-zinc-800"
           type="button"
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
@@ -84,7 +92,7 @@ export function DetailsPanelLayout({ span, onClose, initialTab = 'input', onTabC
               setTab(item);
               onTabChange?.(item);
             }}
-            className={`border-b-2 px-3 py-3 text-xs font-semibold ${tab === item ? 'border-pink-500 text-pink-600 dark:text-pink-300' : 'border-transparent text-zinc-500'}`}
+            className={`border-b-2 px-3 py-3 text-xs font-semibold transition ${tab === item ? theme.activeTabClass : 'border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
           >
             {item === 'input' ? 'Entrada' : item === 'output' ? 'Salida' : 'Contexto'}
           </button>
@@ -92,7 +100,7 @@ export function DetailsPanelLayout({ span, onClose, initialTab = 'input', onTabC
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-5 pb-8">
         <section className="mb-4 grid grid-cols-2 gap-2.5">
-          <Metric label="Tipo" value={span.type} />
+          <Metric label="Tipo" value={isOutput ? 'resultado' : span.type} />
           <Metric label="Duración" value={formatDuration(span.durationMs)} />
         </section>
         {databaseQuery ? (
@@ -102,7 +110,7 @@ export function DetailsPanelLayout({ span, onClose, initialTab = 'input', onTabC
             </div>
             {sql ? (
               <details className="mt-3" open>
-                <summary className="cursor-pointer text-[11px] font-semibold text-amber-800 focus-visible:outline-2 focus-visible:outline-pink-500 dark:text-amber-300">Ver consulta SQL</summary>
+                <summary className="cursor-pointer text-[11px] font-semibold text-amber-800 focus-visible:outline-2 focus-visible:outline-amber-500 dark:text-amber-300">Ver consulta SQL</summary>
                 <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-white/70 p-3 font-mono text-[10px] break-words dark:bg-zinc-950/70">{sql}</pre>
               </details>
             ) : null}
@@ -111,7 +119,7 @@ export function DetailsPanelLayout({ span, onClose, initialTab = 'input', onTabC
 
         {tab === 'input' || tab === 'output' ? (
           <>
-            <Detail label="Método" value={methodDescription} />
+            <Detail label={isOutput ? 'Resultado' : 'Método'} value={methodDescription} />
             {span.error ? (
               <div className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-600 dark:text-rose-300">
                 <strong>{span.error.name}</strong>

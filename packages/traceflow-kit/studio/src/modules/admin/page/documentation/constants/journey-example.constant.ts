@@ -11,7 +11,7 @@ const spans: TraceFlowSpanDto[] = [
     spanId: '1000000000000001',
     parentSpanId: null,
     name: 'POST /orders',
-    type: 'custom',
+    type: 'http',
     labels: ['http', 'post'],
     className: null,
     methodName: null,

@@ -28,21 +28,23 @@ export const TRACE_NODE_TEXT_CLASSES: Record<TraceNodeExecutionState, string> = 
 };
 export const TRACE_NODE_TYPE_BORDER_CLASSES: Record<TraceFlowNodeType, string> = {
   controller: 'border-violet-400 dark:border-violet-700',
-  service: 'border-sky-400 dark:border-sky-700',
-  method: 'border-indigo-400 dark:border-indigo-700',
+  service: 'border-blue-400 dark:border-blue-700',
+  method: 'border-slate-400 dark:border-slate-600',
   table: 'border-amber-400 dark:border-amber-700',
   validation: 'border-emerald-400 dark:border-emerald-700',
   transformation: 'border-fuchsia-400 dark:border-fuchsia-700',
-  'external-api': 'border-cyan-400 dark:border-cyan-700',
+  'external-api': 'border-orange-400 dark:border-orange-700',
+  http: 'border-indigo-400 dark:border-indigo-700',
   custom: 'border-zinc-400 dark:border-zinc-600',
 };
 export const TRACE_NODE_TYPE_HEADER_CLASSES: Record<TraceFlowNodeType, string> = {
   controller: 'bg-violet-600 text-white',
-  service: 'bg-sky-600 text-white',
-  method: 'bg-indigo-600 text-white',
+  service: 'bg-blue-600 text-white',
+  method: 'bg-slate-700 text-white',
   table: 'bg-amber-500 text-amber-950',
   validation: 'bg-emerald-600 text-white',
   transformation: 'bg-fuchsia-600 text-white',
-  'external-api': 'bg-cyan-600 text-white',
+  'external-api': 'bg-orange-600 text-white',
+  http: 'bg-indigo-600 text-white',
   custom: 'bg-zinc-600 text-white',
 };

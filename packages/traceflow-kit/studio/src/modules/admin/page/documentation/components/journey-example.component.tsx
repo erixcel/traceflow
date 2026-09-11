@@ -16,7 +16,7 @@ export function JourneyExampleComponent(): React.JSX.Element {
   const selectSpan: TraceCanvasProps['onSelectSpan'] = (span, tab = 'input') => setSelected(span ? { span, tab } : null);
 
   return (
-    <div className="relative mt-8 flex h-[42rem] min-h-0 overflow-hidden rounded-3xl border border-zinc-200 bg-zinc-50 shadow-sm dark:border-zinc-800 dark:bg-[#101116]">
+    <div className="relative mt-8 flex h-[54rem] min-h-0 overflow-hidden rounded-3xl border border-zinc-200 bg-zinc-50 shadow-sm dark:border-zinc-800 dark:bg-[#101116]">
       <ReactFlowProvider>
         <TraceGroupedCanvasLayout trace={DOCUMENTATION_JOURNEY_TRACE} onSelectSpan={selectSpan} />
       </ReactFlowProvider>

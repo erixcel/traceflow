@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import type { NodeChange } from '@xyflow/react';
 import type { TraceFlowTraceDto } from 'traceflow/protocol';
-import { buildGroupedFlowGraph, toggleGroupedDetail } from '../functions/grouped-flow.function';
+import { buildGroupedFlowGraph, findSpanForCardId, toggleGroupedDetail } from '../functions/grouped-flow.function';
 import { GROUPED_FLOW_GEOMETRY } from '../constants/grouped-flow.constant';
 import type { FitViewOptions, GroupedDetailSelection } from '../interfaces/grouped-flow.interface';
 import type { TraceNodeDimensions } from '../interfaces/trace-graph.interface';
@@ -136,6 +136,12 @@ export function useGroupedFlow(trace: TraceFlowTraceDto) {
 
   // When panel opens or closes, re-fit view to prevent overlapping
   useEffect(() => {
+    if (!selectedSpan) {
+      setDetailPath([]);
+      focusedCardIdsRef.current = null;
+      const timer = window.setTimeout(() => fitRef.current({ forceFull: true, duration: 320 }), 60);
+      return () => window.clearTimeout(timer);
+    }
     const timer = window.setTimeout(() => fitRef.current(250), 60);
     return () => window.clearTimeout(timer);
   }, [selectedSpan]);
@@ -160,46 +166,72 @@ export function useGroupedFlow(trace: TraceFlowTraceDto) {
     window.setTimeout(() => fitRef.current(300), 80);
   }, []);
 
-  const openStep = useCallback((ownerId: string, spanId: string) => {
-    setDetailPath((current) => {
-      const isCurrentlyOpen = current.some((item) => item.ownerId === ownerId && item.spanId === spanId);
-      const next = toggleGroupedDetail(current, ownerId, spanId);
-      if (isCurrentlyOpen) {
+  const openStep = useCallback(
+    (ownerId: string, spanId: string) => {
+      setDetailPath((current) => {
+        const isCurrentlyOpen = current.some((item) => item.ownerId === ownerId && item.spanId === spanId);
+        const next = toggleGroupedDetail(current, ownerId, spanId);
+        if (isCurrentlyOpen) {
+          const parentSpan = findSpanForCardId(ownerId, trace);
+          if (parentSpan) {
+            useTraceStore.getState().setSelectedSpan(parentSpan);
+          }
+
+          if (next.length === 0) {
+            focusedCardIdsRef.current = [ownerId];
+            window.setTimeout(() => fitRef.current({ cardIds: [ownerId], duration: 300 }), 30);
+          } else {
+            const last = next[next.length - 1];
+            if (last) {
+              focusedCardIdsRef.current = [last.ownerId, `detail-${last.spanId}`];
+              window.setTimeout(() => fitRef.current({ cardIds: [last.ownerId, `detail-${last.spanId}`], duration: 300 }), 30);
+            }
+          }
+        } else {
+          focusedCardIdsRef.current = [ownerId, `detail-${spanId}`];
+          window.setTimeout(() => fitRef.current({ cardIds: [ownerId, `detail-${spanId}`], duration: 320 }), 30);
+        }
+        return next;
+      });
+    },
+    [trace],
+  );
+
+  const closeDetail = useCallback(
+    (id: string) => {
+      setDetailPath((current) => {
+        const index = current.findIndex((item) => `detail-${item.spanId}` === id);
+        const closedItem = index >= 0 ? current[index] : null;
+        const next = index < 0 ? current : current.slice(0, index);
+
+        if (closedItem) {
+          const parentSpan = findSpanForCardId(closedItem.ownerId, trace);
+          if (parentSpan) {
+            useTraceStore.getState().setSelectedSpan(parentSpan);
+          }
+        }
+
         if (next.length === 0) {
-          focusedCardIdsRef.current = [ownerId];
-          window.setTimeout(() => fitRef.current({ cardIds: [ownerId], duration: 300 }), 30);
+          const ownerCardId = closedItem?.ownerId;
+          if (ownerCardId) {
+            focusedCardIdsRef.current = [ownerCardId];
+            window.setTimeout(() => fitRef.current({ cardIds: [ownerCardId], duration: 300 }), 40);
+          } else {
+            focusedCardIdsRef.current = null;
+            window.setTimeout(() => fitRef.current({ forceFull: true, duration: 300 }), 40);
+          }
         } else {
           const last = next[next.length - 1];
           if (last) {
             focusedCardIdsRef.current = [last.ownerId, `detail-${last.spanId}`];
-            window.setTimeout(() => fitRef.current({ cardIds: [last.ownerId, `detail-${last.spanId}`], duration: 300 }), 30);
+            window.setTimeout(() => fitRef.current({ cardIds: [last.ownerId, `detail-${last.spanId}`], duration: 300 }), 40);
           }
         }
-      } else {
-        focusedCardIdsRef.current = [ownerId, `detail-${spanId}`];
-        window.setTimeout(() => fitRef.current({ cardIds: [ownerId, `detail-${spanId}`], duration: 320 }), 30);
-      }
-      return next;
-    });
-  }, []);
-
-  const closeDetail = useCallback((id: string) => {
-    setDetailPath((current) => {
-      const index = current.findIndex((item) => `detail-${item.spanId}` === id);
-      const next = index < 0 ? current : current.slice(0, index);
-      if (next.length === 0) {
-        focusedCardIdsRef.current = null;
-        window.setTimeout(() => fitRef.current({ forceFull: true, duration: 300 }), 40);
-      } else {
-        const last = next[next.length - 1];
-        if (last) {
-          focusedCardIdsRef.current = [last.ownerId, `detail-${last.spanId}`];
-          window.setTimeout(() => fitRef.current({ cardIds: [last.ownerId, `detail-${last.spanId}`], duration: 300 }), 40);
-        }
-      }
-      return next;
-    });
-  }, []);
+        return next;
+      });
+    },
+    [trace],
+  );
 
   const onNodesChange = useCallback((changes: NodeChange<GroupedFlowNode>[]) => {
     setDimensions((current) => {
@@ -234,6 +266,19 @@ export function useGroupedFlow(trace: TraceFlowTraceDto) {
     closeDetail,
     hasDetails: detailPath.length > 0,
     closeDetails: () => {
+      if (detailPath.length > 0) {
+        const first = detailPath[0];
+        if (first) {
+          const parentSpan = findSpanForCardId(first.ownerId, trace);
+          if (parentSpan) {
+            useTraceStore.getState().setSelectedSpan(parentSpan);
+          }
+          focusedCardIdsRef.current = [first.ownerId];
+          setDetailPath([]);
+          window.setTimeout(() => fitRef.current({ cardIds: [first.ownerId], duration: 300 }), 50);
+          return;
+        }
+      }
       focusedCardIdsRef.current = null;
       setDetailPath([]);
       window.setTimeout(() => fitRef.current({ forceFull: true, duration: 300 }), 50);

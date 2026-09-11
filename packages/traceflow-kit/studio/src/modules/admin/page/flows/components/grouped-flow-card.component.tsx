@@ -24,12 +24,12 @@ export function GroupedFlowCardComponent({ data }: NodeProps<GroupedCardNode>): 
       ? 'border-emerald-100 bg-emerald-50/70 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-500/10 dark:text-emerald-300'
       : GROUPED_FLOW_TYPE_HEADER_CLASSES[nodeType];
   const handleClass = status === 'error' ? '!bg-rose-400' : data.kind === 'output' ? '!bg-emerald-400' : GROUPED_FLOW_TYPE_HANDLE_CLASSES[nodeType];
-  const targetSpan = data.kind === 'entry' ? (data.request?.span ?? data.node?.span) : data.node?.span;
+  const targetSpan = data.kind === 'entry' ? (data.node?.span ?? data.request?.span) : data.node?.span;
   const onHeaderClick = (event: React.MouseEvent) => {
     const target = event.target as HTMLElement;
     if (target.closest('button')) return;
     if (targetSpan) {
-      selectSpan(targetSpan);
+      selectSpan(targetSpan, data.kind === 'output' ? 'output' : undefined);
       if (data.detail) {
         fit();
       } else if (data.openedSpanId) {
@@ -59,7 +59,7 @@ export function GroupedFlowCardComponent({ data }: NodeProps<GroupedCardNode>): 
           {data.kind === 'process' && data.node ? <span className="font-mono text-[9px] opacity-70">{formatDuration(data.node.span.durationMs)}</span> : null}
           {data.detail ? (
             <button
-              className="nodrag nopan ml-1 flex size-5 cursor-pointer items-center justify-center rounded hover:bg-black/5 focus-visible:outline-2 dark:hover:bg-white/10"
+              className="nodrag nopan ml-1 flex size-5 cursor-pointer items-center justify-center rounded hover:bg-black/5 focus:outline-none focus-visible:outline-2 focus-visible:outline-pink-500 dark:hover:bg-white/10"
               aria-label={`Cerrar detalle de ${data.node?.span.name}`}
               onClick={() => closeDetail(data.cardId)}
             >

@@ -1,6 +1,6 @@
 import { MarkerType } from '@xyflow/react';
 import type { Edge } from '@xyflow/react';
-import type { TraceFlowTraceDto } from 'traceflow/protocol';
+import type { TraceFlowSpanDto, TraceFlowTraceDto } from 'traceflow/protocol';
 import { GROUPED_FLOW_GEOMETRY } from '../constants/grouped-flow.constant';
 import type { GroupedCardData, GroupedDetailSelection, GroupedFlowGraph, GroupedFlowModel } from '../interfaces/grouped-flow.interface';
 import type { JourneyNode } from '../interfaces/journey.interface';
@@ -90,6 +90,7 @@ export function buildGroupedFlowGraph(
     focusable: false,
     connectable: false,
   });
+  const outputNode = buildOutputNode(trace, model.entry?.span);
   const nodes: GroupedFlowNode[] = [
     lane('lane-entry', -24, g.entryWidth + g.columnGap / 2 + 24, '01', 'Entrada', 'Petición y controller', true),
     lane('lane-process', processX - g.columnGap / 2, outputX - processX, '02', 'Proceso', 'Pasos anidados · orden de ejecución ↓', true),
@@ -99,7 +100,7 @@ export function buildGroupedFlowGraph(
       id: 'grouped-output',
       type: 'groupedCard',
       position: { x: outputX, y: centerY - outputHeight / 2 },
-      data: data('output', model.entry, 'grouped-output'),
+      data: data('output', outputNode, 'grouped-output'),
       style: { width: g.outputWidth },
       zIndex: 2,
     },
@@ -207,4 +208,74 @@ function groupedEdge(source: string, target: string, error: boolean, sequential:
     markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color },
     zIndex: 1,
   };
+}
+
+export function buildOutputSpan(trace: TraceFlowTraceDto, controllerSpan?: TraceFlowSpanDto | null): TraceFlowSpanDto {
+  const statusCode = (trace.spans.find((s) => s.attributes?.['http.response.status_code'])?.attributes?.['http.response.status_code'] as number) ?? (trace.status === 'error' ? 500 : 200);
+  const rawOutput =
+    controllerSpan?.output ??
+    controllerSpan?.attributes?.['traceflow.capture.output'] ??
+    trace.spans.find((s) => s.output !== undefined || s.attributes?.['traceflow.capture.output'])?.output ??
+    trace.spans.find((s) => s.attributes?.['traceflow.capture.output'])?.attributes?.['traceflow.capture.output'];
+
+  return {
+    protocolVersion: 1,
+    traceId: trace.traceId,
+    spanId: 'output-result',
+    parentSpanId: controllerSpan?.spanId ?? null,
+    serviceName: trace.serviceName,
+    name: trace.status === 'error' ? 'Ejecución con error' : 'Resultado de la ejecución',
+    type: 'custom',
+    labels: ['resultado', 'output'],
+    className: null,
+    methodName: null,
+    description: `HTTP ${statusCode} · ${trace.status === 'success' ? 'Completado' : 'Error'}`,
+    startedAt: trace.startedAt,
+    endedAt: trace.updatedAt,
+    durationMs: trace.durationMs,
+    status: trace.status,
+    ...(rawOutput !== undefined ? { output: rawOutput } : {}),
+    attributes: {
+      'traceflow.node_type': 'custom',
+      'traceflow.is_output': true,
+      'http.response.status_code': statusCode,
+      ...(rawOutput !== undefined ? { 'traceflow.capture.output': typeof rawOutput === 'string' ? rawOutput : JSON.stringify(rawOutput) } : {}),
+      'traceflow.execution.total_duration_ms': trace.durationMs,
+      'traceflow.execution.span_count': trace.spanCount,
+    },
+    error: trace.status === 'error' ? (trace.spans.find((s) => s.status === 'error')?.error ?? null) : null,
+  };
+}
+
+export function buildOutputNode(trace: TraceFlowTraceDto, controllerSpan?: TraceFlowSpanDto | null): JourneyNode {
+  return {
+    span: buildOutputSpan(trace, controllerSpan),
+    children: [],
+  };
+}
+
+export function findSpanForCardId(cardId: string, trace: TraceFlowTraceDto): TraceFlowSpanDto | null {
+  if (cardId === 'grouped-entry') {
+    const controller = trace.spans.find((s) => s.type === 'controller');
+    const root = trace.spans.find((s) => s.attributes?.['traceflow.http.request_root'] === true);
+    return controller ?? root ?? trace.spans[0] ?? null;
+  }
+  if (cardId === 'grouped-output') {
+    const controller = trace.spans.find((s) => s.type === 'controller');
+    return buildOutputSpan(trace, controller);
+  }
+  const spanId = cardId.startsWith('detail-') ? cardId.replace('detail-', '') : cardId;
+  return trace.spans.find((s) => s.spanId === spanId) ?? null;
+}
+
+export function findParentSpan(span: TraceFlowSpanDto, trace: TraceFlowTraceDto, fallbackOwnerId?: string): TraceFlowSpanDto | null {
+  if (fallbackOwnerId) {
+    const owner = findSpanForCardId(fallbackOwnerId, trace);
+    if (owner && owner.spanId !== span.spanId) return owner;
+  }
+  if (span.parentSpanId) {
+    const parent = trace.spans.find((s) => s.spanId === span.parentSpanId);
+    if (parent) return parent;
+  }
+  return null;
 }

@@ -17,7 +17,7 @@ export function GroupedFlowOutputComponent({ data }: GroupedCardProps): React.JS
       onClick={(e) => {
         if ((e.target as HTMLElement).closest('button, details')) return;
         if (span) {
-          selectSpan(span);
+          selectSpan(span, 'output');
           fit({ cardIds: ['grouped-output'] });
         }
       }}

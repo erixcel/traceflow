@@ -28,7 +28,7 @@ export function GroupedFlowEntryComponent({ data }: GroupedCardProps): React.JSX
         className="cursor-pointer p-4"
         onClick={(e) => {
           if ((e.target as HTMLElement).closest('button')) return;
-          selectSpan(requestSpan ?? span);
+          selectSpan(span ?? requestSpan);
           if (data.openedSpanId) {
             fit({ cardIds: ['grouped-entry', `detail-${data.openedSpanId}`] });
           } else {

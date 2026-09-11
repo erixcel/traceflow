@@ -1,5 +1,5 @@
 import type { TraceFlowSpanDto, TraceFlowTraceDto } from 'traceflow/protocol';
-import { buildGroupedFlowGraph, buildGroupedFlowModel, toggleGroupedDetail } from '../studio/src/modules/admin/page/flows/functions/grouped-flow.function';
+import { buildGroupedFlowGraph, buildGroupedFlowModel, findParentSpan, findSpanForCardId, toggleGroupedDetail } from '../studio/src/modules/admin/page/flows/functions/grouped-flow.function';
 import { groupConcurrentSpans } from '../studio/src/modules/admin/page/flows/functions/execution-flow.function';
 import { buildGroupedFlowJson } from '../studio/src/modules/admin/page/flows/functions/grouped-flow-json.function';
 import { descendants } from '../studio/src/modules/admin/page/flows/functions/journey.function';
@@ -239,5 +239,65 @@ describe('grouped execution graph', () => {
     expect(filtered.nodes.map((node) => node.id)).toEqual(graph.nodes.map((node) => node.id));
     expect(filtered.edges.map((edge) => edge.id)).toEqual(graph.edges.map((edge) => edge.id));
     expect(filtered.nodes.find((node) => node.id === 'detail-bath')?.data.highlighted).toBe(true);
+  });
+
+  it('creates an execution output node with output payload, duration, and status code in graph and json', () => {
+    const data = trace([
+      span('request', null, {
+        name: 'GET /dashboard',
+        type: 'http',
+        attributes: {
+          'traceflow.http.request_root': true,
+          'http.response.status_code': 200,
+        },
+      }),
+      span('controller', 'request', {
+        type: 'controller',
+        output: { data: [{ id: 1 }], total: 1 },
+      }),
+    ]);
+    const graph = buildGroupedFlowGraph(data);
+    const outputCard = graph.nodes.find((n) => n.id === 'grouped-output') as GroupedCardNode | undefined;
+    expect(outputCard?.data.node?.span.spanId).toBe('output-result');
+    expect(outputCard?.data.node?.span.output).toEqual({ data: [{ id: 1 }], total: 1 });
+
+    const json = buildGroupedFlowJson(data) as Record<string, unknown>;
+    expect(json.output).toEqual({
+      durationMs: 10,
+      status: 'success',
+      statusCode: 200,
+      isComplete: true,
+      result: { data: [{ id: 1 }], total: 1 },
+    });
+
+    const entrySpan = findSpanForCardId('grouped-entry', data);
+    expect(entrySpan?.spanId).toBe('controller');
+
+    const resultSpan = findSpanForCardId('grouped-output', data);
+    expect(resultSpan?.spanId).toBe('output-result');
+  });
+
+  it('resolves the owner card as parent instead of jumping to unrelated root or auth spans', () => {
+    const data = trace([
+      span('request', null, { name: 'GET /dashboard', type: 'http', attributes: { 'traceflow.http.request_root': true } }),
+      span('auth', 'request', { name: 'auth' }),
+      span('controller', 'request', { type: 'controller' }),
+      span('coordinator', 'controller', { name: 'Dashboard transactions' }),
+      span('bath', 'coordinator', { name: 'Consultar baños' }),
+      span('pet', 'bath', { name: 'SELECT bath' }),
+    ]);
+
+    const bathSpan = data.spans.find((s) => s.spanId === 'bath')!;
+    const parentOfBath = findParentSpan(bathSpan, data, 'coordinator');
+    expect(parentOfBath?.spanId).toBe('coordinator');
+    expect(parentOfBath?.name).toBe('Dashboard transactions');
+
+    const authSpan = data.spans.find((s) => s.spanId === 'auth')!;
+    const parentOfAuth = findParentSpan(authSpan, data, 'grouped-entry');
+    expect(parentOfAuth?.spanId).toBe('controller');
+
+    const petSpan = data.spans.find((s) => s.spanId === 'pet')!;
+    const parentOfPet = findParentSpan(petSpan, data, 'detail-bath');
+    expect(parentOfPet?.spanId).toBe('bath');
   });
 });

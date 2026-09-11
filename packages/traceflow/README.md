@@ -119,12 +119,14 @@ app.use(
 ```
 
 El middleware elimina la query del nombre y de `url.path`, termina la traza con la
-respuesta y marca cierres prematuros o respuestas 5xx como error. Las seis
-secciones HTTP se capturan por defecto y las vacías no se envían. `headers` acepta
-`true`, `false` o una lista de nombres. `authorization` acepta `none`, `scheme` o
-`full`; el valor predeterminado `scheme` conserva únicamente `Bearer`. Usa `full`
-solo cuando Studio deba recibir la credencial completa. `authorization` y `cookie`
-se presentan en secciones propias y no se duplican dentro de `headers`.
+respuesta, asigna internamente el tipo de nodo `http` (manejado de forma automática e
+interna sin requerir `@Trace(type='http')` en tus métodos) y marca cierres prematuros o
+respuestas 5xx como error. Las seis secciones HTTP se capturan por defecto y las vacías
+no se envían. `headers` acepta `true`, `false` o una lista de nombres. `authorization`
+acepta `none`, `scheme` o `full`; el valor predeterminado `scheme` conserva únicamente
+`Bearer`. Usa `full` solo cuando Studio deba recibir la credencial completa.
+`authorization` y `cookie` se presentan en secciones propias y no se duplican dentro
+de `headers`.
 
 `labels` son etiquetas visuales opcionales que Studio muestra como badges en
 la tarjeta del span. `@Trace()` captura por defecto los argumentos con sus

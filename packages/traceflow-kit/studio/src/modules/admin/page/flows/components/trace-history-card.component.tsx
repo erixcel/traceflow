@@ -9,7 +9,7 @@ const STATUS_PRESENTATION = {
     dot: 'bg-emerald-500',
     activeBorder: 'border-zinc-200 shadow-[0_1px_2px_rgba(0,0,0,0.04)] dark:border-zinc-800 dark:shadow-[0_1px_3px_rgba(0,0,0,0.24)]',
     activeRail: 'bg-emerald-600 dark:bg-emerald-500',
-    action: 'text-emerald-700 hover:bg-emerald-50 hover:text-emerald-600 focus-visible:ring-emerald-500/50 dark:text-emerald-400 dark:hover:bg-emerald-950/70 dark:hover:text-emerald-300',
+    action: 'text-emerald-700 hover:text-emerald-600 focus-visible:ring-emerald-500/50 dark:text-emerald-400 dark:hover:text-emerald-300',
     focusRing: 'focus-visible:ring-emerald-500/60',
   },
   error: {
@@ -18,7 +18,7 @@ const STATUS_PRESENTATION = {
     dot: 'bg-rose-500',
     activeBorder: 'border-zinc-200 shadow-[0_1px_2px_rgba(0,0,0,0.04)] dark:border-zinc-800 dark:shadow-[0_1px_3px_rgba(0,0,0,0.24)]',
     activeRail: 'bg-rose-500 dark:bg-rose-400',
-    action: 'text-rose-700 hover:bg-rose-50 hover:text-rose-600 focus-visible:ring-rose-500/50 dark:text-rose-400 dark:hover:bg-rose-950/70 dark:hover:text-rose-300',
+    action: 'text-rose-700 hover:text-rose-600 focus-visible:ring-rose-500/50 dark:text-rose-400 dark:hover:text-rose-300',
     focusRing: 'focus-visible:ring-rose-500/60',
   },
   skipped: {
@@ -27,7 +27,7 @@ const STATUS_PRESENTATION = {
     dot: 'bg-zinc-400 dark:bg-zinc-500',
     activeBorder: 'border-zinc-200 shadow-[0_1px_2px_rgba(0,0,0,0.04)] dark:border-zinc-800 dark:shadow-[0_1px_3px_rgba(0,0,0,0.24)]',
     activeRail: 'bg-zinc-500 dark:bg-zinc-400',
-    action: 'text-zinc-700 hover:bg-zinc-100 hover:text-zinc-600 focus-visible:ring-zinc-500/50 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-200',
+    action: 'text-zinc-700 hover:text-zinc-600 focus-visible:ring-zinc-500/50 dark:text-zinc-300 dark:hover:text-zinc-200',
     focusRing: 'focus-visible:ring-zinc-500/60',
   },
 } as const;
@@ -84,7 +84,7 @@ export function TraceHistoryCardComponent({ trace, active, onSelect, onShowDetai
           <span>{trace.spanCount} pasos</span>
         </span>
         <button
-          className={`inline-flex h-7 shrink-0 items-center gap-1 rounded px-1.5 text-[9px] font-semibold outline-none transition focus-visible:ring-2 ${status.action}`}
+          className={`inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded px-1 text-[9px] font-semibold outline-none transition focus-visible:ring-2 ${status.action}`}
           type="button"
           onClick={() => void onShowDetails(trace.traceId)}
           aria-label={`Ver detalles de ${trace.rootName}`}

@@ -18,7 +18,7 @@ export class TraceFlowNodeDto {
   @ApiProperty({ example: 'List customers' })
   name!: string;
 
-  @ApiProperty({ enum: ['controller', 'service', 'method', 'table', 'validation', 'transformation', 'external-api', 'custom'], example: 'controller' })
+  @ApiProperty({ enum: ['controller', 'service', 'method', 'table', 'validation', 'transformation', 'external-api', 'http', 'custom'], example: 'controller' })
   type!: string;
 
   @ApiProperty({ example: 'CustomerController' })
@@ -78,7 +78,7 @@ export class TraceSpanDto {
   @ApiProperty({ example: 'CustomerController.findAll' })
   name!: string;
 
-  @ApiProperty({ enum: ['controller', 'service', 'method', 'table', 'validation', 'transformation', 'external-api', 'custom'], example: 'controller' })
+  @ApiProperty({ enum: ['controller', 'service', 'method', 'table', 'validation', 'transformation', 'external-api', 'http', 'custom'], example: 'controller' })
   type!: string;
 
   @ApiPropertyOptional({ type: [String], example: ['table', 'select'], default: [] })
