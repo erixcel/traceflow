@@ -4,6 +4,7 @@ import { GroupedFlowContext } from '../contexts/grouped-flow.context';
 import { getHttpInputFields, getHttpInputSections, getVisibleHttpInputSections, isEmptyHttpInputValue } from '../functions/http-input.function';
 import { getInputFields, summarizeValue } from '../functions/journey.function';
 import { getTraceDataSections } from '../functions/trace-data.function';
+import { getValidationContract } from '../functions/validation-contract.function';
 import type { GroupedCardProps } from '../interfaces/grouped-flow.interface';
 import { useHttpInputStore } from '../stores/http-input.store';
 import { GroupedFlowStepsComponent } from './grouped-flow-steps.component';
@@ -14,6 +15,7 @@ export function GroupedFlowEntryComponent({ data }: GroupedCardProps): React.JSX
   const preferences = useHttpInputStore((state) => state.preferences);
   const span = data.node?.span;
   if (!span) return <p className="p-5 text-xs leading-5 text-zinc-500 dark:text-zinc-400">La entrada no está disponible en los pasos recibidos.</p>;
+  const contract = getValidationContract(span);
   const requestSpan = data.request?.span;
   const requestInput = requestSpan ? getTraceDataSections(requestSpan).input : undefined;
   const query = getHttpInputSections(requestInput).find((section) => section.key === 'query')?.value;
@@ -40,10 +42,18 @@ export function GroupedFlowEntryComponent({ data }: GroupedCardProps): React.JSX
           {typeof method === 'string' ? <span className="rounded bg-emerald-50 px-1.5 py-1 text-[9px] font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">{method}</span> : null}
           <h3 className="min-w-0 break-words text-[13px] font-semibold leading-5">{typeof route === 'string' ? route : Array.isArray(route) ? route.join(' · ') : span.name}</h3>
         </div>
-        <p className="mt-2 break-words font-mono text-[10px] leading-4 text-zinc-500 dark:text-zinc-400">
+        <p className="mt-2 font-mono text-[10px] leading-4 text-zinc-500 dark:text-zinc-400">
           {span.className}
           {span.methodName ? `.${span.methodName}` : ''}
         </p>
+        {contract?.dtoName ? (
+          <div className="mt-2.5 grid grid-cols-[5.5rem_minmax(0,1fr)] items-center gap-2 rounded-md bg-zinc-50 px-2 py-1.5 dark:bg-zinc-900/70">
+            <span className="text-[8px] font-semibold tracking-wide text-zinc-400 uppercase">DTO</span>
+            <code className="truncate text-right text-[9px] text-zinc-600 dark:text-zinc-300" title={contract.dtoName}>
+              {contract.dtoName}
+            </code>
+          </div>
+        ) : null}
         {fields.length || (!requestSpan && preferences.visible.query) || (requestSpan && showQuery) ? (
           <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-zinc-100 pt-3 dark:border-zinc-800">
             {fields.slice(0, 6).map(([key, value]) => (
@@ -71,7 +81,12 @@ export function GroupedFlowEntryComponent({ data }: GroupedCardProps): React.JSX
             }
           }}
         >
-          {requestSpan ? `Ver datos HTTP${visibleHttpSections.length ? ` · ${visibleHttpSections.length}` : ''}` : `Inspeccionar entrada${fields.length > 6 ? ` · ${fields.length} campos` : ''}`} ↗
+          {requestSpan
+            ? `Ver datos HTTP${visibleHttpSections.length ? ` · ${visibleHttpSections.length}` : ''}`
+            : contract
+              ? `Ver contrato${contract.dtoName ? ` · ${contract.dtoName}` : ''} (${contract.parameters.length} params)`
+              : `Inspeccionar entrada${fields.length > 6 ? ` · ${fields.length} campos` : ''}`}{' '}
+          ↗
         </button>
       </div>
       {data.preconditions.length ? (

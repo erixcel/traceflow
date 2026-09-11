@@ -7,6 +7,8 @@ import { filterHttpInput } from '../functions/http-input.function';
 import { getTraceDataSections } from '../functions/trace-data.function';
 import { JsonViewerComponent } from '../components/json-viewer.component';
 import { DatabaseQuerySummaryComponent } from '../components/database-query-summary.component';
+import { ValidationContractComponent } from '../components/validation-contract.component';
+import { getValidationContract } from '../functions/validation-contract.function';
 import { DETAILS_PANEL_ERROR_THEME, DETAILS_PANEL_OUTPUT_THEME, DETAILS_PANEL_TYPE_THEMES, GROUPED_FLOW_TYPE_LABELS } from '../constants/grouped-flow.constant';
 import type { DetailItemProps, DetailsPanelProps, IdRowProps, SectionTitleProps, TraceDataSectionProps } from '../interfaces/details-panel.interface';
 import { useHttpInputStore } from '../stores/http-input.store';
@@ -20,6 +22,8 @@ export function DetailsPanelLayout({ span, onClose, initialTab = 'input', onTabC
     setTab(effectiveInitialTab);
   }, [effectiveInitialTab, span.spanId]);
   const [copied, setCopied] = useState<string | null>(null);
+  const validationContract = useMemo(() => getValidationContract(span), [span]);
+  const [inputViewMode, setInputViewMode] = useState<'contract' | 'raw'>('contract');
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   useEffect(() => {
@@ -126,17 +130,39 @@ export function DetailsPanelLayout({ span, onClose, initialTab = 'input', onTabC
                 <p className="mt-2 break-words">{span.error.message}</p>
               </div>
             ) : null}
-            <TraceDataSection
-              title={tab === 'input' ? 'Entrada' : 'Salida'}
-              value={tab === 'input' ? visibleInput : data.output}
-              emptyMessage={
-                tab === 'input'
-                  ? data.input === undefined
-                    ? 'No se capturaron datos de entrada.'
-                    : 'Las secciones capturadas están ocultas en la configuración.'
-                  : 'No se capturaron datos de salida.'
-              }
-            />
+            {tab === 'input' && validationContract ? (
+              <div className="mt-4 mb-3 grid w-full grid-cols-2 rounded-lg border border-zinc-200/80 bg-zinc-100/60 p-0.5 text-xs dark:border-zinc-800 dark:bg-zinc-900/60">
+                <button
+                  type="button"
+                  className={`flex cursor-pointer items-center justify-center rounded-md py-1.5 font-medium transition ${inputViewMode === 'contract' ? 'bg-white text-zinc-900 shadow-xs dark:bg-zinc-800 dark:text-zinc-100' : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'}`}
+                  onClick={() => setInputViewMode('contract')}
+                >
+                  Filtros
+                </button>
+                <button
+                  type="button"
+                  className={`flex cursor-pointer items-center justify-center rounded-md py-1.5 font-medium transition ${inputViewMode === 'raw' ? 'bg-white text-zinc-900 shadow-xs dark:bg-zinc-800 dark:text-zinc-100' : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'}`}
+                  onClick={() => setInputViewMode('raw')}
+                >
+                  JSON
+                </button>
+              </div>
+            ) : null}
+            {tab === 'input' && validationContract && inputViewMode === 'contract' ? (
+              <ValidationContractComponent contract={validationContract} input={visibleInput} />
+            ) : (
+              <TraceDataSection
+                title={tab === 'input' ? 'Entrada' : 'Salida'}
+                value={tab === 'input' ? visibleInput : data.output}
+                emptyMessage={
+                  tab === 'input'
+                    ? data.input === undefined
+                      ? 'No se capturaron datos de entrada.'
+                      : 'Las secciones capturadas están ocultas en la configuración.'
+                    : 'No se capturaron datos de salida.'
+                }
+              />
+            )}
           </>
         ) : (
           <>

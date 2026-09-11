@@ -28,6 +28,8 @@ export interface TraceNodeOptions {
   attributes?: TraceFlowAttributes;
   labels?: readonly string[];
   capture?: TraceCaptureOptions;
+  /** Clase DTO opcional para mapear y validar el contrato de parámetros. Se detecta automáticamente si se omite. */
+  dto?: unknown | unknown[];
 }
 
 /** Opciones para instrumentar como tabla todos los métodos propios de una clase. */

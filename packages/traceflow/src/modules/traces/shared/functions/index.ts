@@ -3,3 +3,4 @@ export { buildTraceFlowHttpInput, createTraceFlowHttpMiddleware, getRequestPath,
 export { isSensitiveAttributeKey, normalizeAttributeValue, normalizeAttributes, parseJsonSerializable, toJsonSerializable } from './json.function';
 export { normalizeLabels } from './labels.function';
 export { readableSpanToTraceFlowSpan } from './span-converter.function';
+export { extractValidationContract, getValidationSchemaAttributes } from './validation-schema.function';

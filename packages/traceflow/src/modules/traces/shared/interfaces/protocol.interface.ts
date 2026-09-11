@@ -20,6 +20,30 @@ export interface TraceFlowErrorDto {
   stack?: string;
 }
 
+export interface TraceFlowValidationRuleDto {
+  name: string;
+  constraints?: (string | number | boolean)[];
+  description?: string;
+}
+
+export interface TraceFlowParameterSchemaDto {
+  name: string;
+  in?: 'query' | 'body' | 'param' | 'header' | 'custom';
+  required: boolean;
+  type: string;
+  description?: string;
+  example?: string | number | boolean | null;
+  default?: string | number | boolean | null;
+  enum?: (string | number)[];
+  rules: TraceFlowValidationRuleDto[];
+}
+
+export interface TraceFlowValidationContractDto {
+  dtoName?: string;
+  location?: 'query' | 'body' | 'param' | 'header' | 'custom';
+  parameters: TraceFlowParameterSchemaDto[];
+}
+
 export interface TraceFlowSpanDto {
   protocolVersion: typeof TRACEFLOW_PROTOCOL_VERSION;
   serviceName: string;

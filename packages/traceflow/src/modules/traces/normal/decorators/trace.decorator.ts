@@ -3,6 +3,7 @@ import { getMethodParameterNames, mapMethodArguments } from '../../shared/functi
 import type { TraceNodeOptions } from '../../../settings/interfaces/traceflow-options.interface';
 import type { TraceableMethod } from '../../shared/types/traceable-method.type';
 import { copyMethodMetadata, getControllerRouteAttributes } from '../../shared/functions/framework-metadata.function';
+import { getValidationSchemaAttributes } from '../../shared/functions/validation-schema.function';
 import { TRACEFLOW_TRACED_METHOD } from '../constants/trace-decorator.constant';
 
 export function Trace(options: TraceNodeOptions = {}): MethodDecorator {
@@ -28,7 +29,11 @@ export function Trace(options: TraceNodeOptions = {}): MethodDecorator {
         () => originalMethod.apply(this, args),
         {
           ...options,
-          attributes: { ...(options.type === 'controller' ? getControllerRouteAttributes(runtimeClass ?? declaringClass, tracedMethod) : {}), ...options.attributes },
+          attributes: {
+            ...(options.type === 'controller' ? getControllerRouteAttributes(runtimeClass ?? declaringClass, tracedMethod) : {}),
+            ...getValidationSchemaAttributes(runtimeClass ?? declaringClass, tracedMethod, args, options.dto),
+            ...options.attributes,
+          },
           className,
           methodName,
         },

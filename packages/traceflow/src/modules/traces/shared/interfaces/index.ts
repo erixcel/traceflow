@@ -6,11 +6,14 @@ export type {
   TraceFlowHealthDto,
   TraceFlowIngestResultDto,
   TraceFlowNodeDefinitionDto,
+  TraceFlowParameterSchemaDto,
   TraceFlowSpanBatchDto,
   TraceFlowSpanDto,
   TraceFlowStoreEvent,
   TraceFlowTraceDto,
   TraceFlowTraceSummaryDto,
+  TraceFlowValidationContractDto,
+  TraceFlowValidationRuleDto,
 } from './protocol.interface';
 export type { TraceSpanOptions } from './trace-span.interface';
 export type {
