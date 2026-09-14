@@ -3,6 +3,7 @@ import type { ConnectionStatus } from '../types/trace.type';
 
 export interface TraceStore {
   traces: TraceFlowTraceSummaryDto[];
+  traceCache: Record<string, TraceFlowTraceDto>;
   activeTraceId: string | null;
   activeTrace: TraceFlowTraceDto | null;
   selectedSpan: TraceFlowSpanDto | null;

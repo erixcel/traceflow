@@ -2,6 +2,7 @@ import type { TraceFlowAttributes } from '../types/protocol.type';
 import type { TraceFlowParameterSchemaDto, TraceFlowValidationContractDto, TraceFlowValidationRuleDto } from '../interfaces/protocol.interface';
 import type { MetadataReflection } from '../interfaces/framework-metadata.interface';
 import { NEST_REQUEST_METHODS } from '../constants/framework-metadata.constant';
+import { tracedDtoRegistry } from '../validation-schema.runtime';
 
 interface SwaggerPropertyMetadata {
   description?: string;
@@ -281,4 +282,66 @@ function isCustomClass(value: unknown): boolean {
     return false;
   }
   return true;
+}
+
+export function registerTracedDto(targetClass: unknown, contract?: TraceFlowValidationContractDto | null): void {
+  if (!targetClass || typeof targetClass !== 'function') return;
+  const resolved = contract ?? extractValidationContract(targetClass);
+  if (resolved) {
+    tracedDtoRegistry.set((targetClass as { name: string }).name, { targetClass, contract: resolved });
+  }
+}
+
+export function getTracedDtoContract(nameOrClass: unknown): TraceFlowValidationContractDto | null {
+  if (typeof nameOrClass === 'string') {
+    return tracedDtoRegistry.get(nameOrClass)?.contract ?? null;
+  }
+  if (typeof nameOrClass === 'function') {
+    return tracedDtoRegistry.get((nameOrClass as { name: string }).name)?.contract ?? extractValidationContract(nameOrClass);
+  }
+  return null;
+}
+
+export function getAllTracedDtos(): TraceFlowValidationContractDto[] {
+  return Array.from(tracedDtoRegistry.values()).map((entry) => entry.contract);
+}
+
+export function findMatchingTracedDto(options: {
+  query?: Record<string, unknown> | undefined;
+  body?: Record<string, unknown> | undefined;
+  errorMessage?: string | undefined;
+}): TraceFlowValidationContractDto | null {
+  const registered = getAllTracedDtos();
+  if (registered.length === 0) return null;
+
+  let bestDto: TraceFlowValidationContractDto | null = null;
+  let bestScore = 0;
+
+  for (const contract of registered) {
+    let score = 0;
+    const paramNames = new Set(contract.parameters.map((p) => p.name));
+
+    if (options.query && typeof options.query === 'object') {
+      for (const key of Object.keys(options.query)) {
+        if (paramNames.has(key)) score += 2;
+      }
+    }
+    if (options.body && typeof options.body === 'object') {
+      for (const key of Object.keys(options.body)) {
+        if (paramNames.has(key)) score += 2;
+      }
+    }
+    if (options.errorMessage) {
+      for (const name of paramNames) {
+        if (options.errorMessage.includes(name)) score += 3;
+      }
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestDto = contract;
+    }
+  }
+
+  return bestScore > 0 ? bestDto : null;
 }

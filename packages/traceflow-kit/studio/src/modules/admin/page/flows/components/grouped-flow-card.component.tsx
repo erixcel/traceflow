@@ -11,52 +11,63 @@ import { GroupedFlowProcessComponent } from './grouped-flow-process.component';
 import { GroupedFlowStatusComponent } from './grouped-flow-status.component';
 
 export function GroupedFlowCardComponent({ data }: NodeProps<GroupedCardNode>): React.JSX.Element {
-  const { closeDetail, selectSpan, fit } = useContext(GroupedFlowContext);
+  const { closeDetail, selectSpan, selectCard, fit } = useContext(GroupedFlowContext);
   const updateNodeInternals = useUpdateNodeInternals();
   useLayoutEffect(() => {
     updateNodeInternals(data.cardId);
-  }, [data.cardId, data.expanded, data.openedSpanId, data.node, updateNodeInternals]);
+  }, [data.cardId, data.expanded, data.openedSpanId, data.node, data.showLeftHandle, data.showRightHandle, updateNodeInternals]);
   const status = data.kind === 'output' ? data.traceStatus : (data.node?.span.status ?? 'unset');
-  const nodeType = data.kind === 'entry' ? 'controller' : (data.node?.span.type ?? 'custom');
-  const borderClass = status === 'error' ? 'border-rose-300 dark:border-rose-800' : data.kind === 'output' ? 'border-emerald-200 dark:border-emerald-900' : GROUPED_FLOW_TYPE_BORDER_CLASSES[nodeType];
-  const headerClass =
-    data.kind === 'output'
+  const entryIsHttp = data.kind === 'entry' && Boolean(data.request || data.node?.span.type === 'http');
+  const nodeType = entryIsHttp ? 'http' : (data.node?.span.type ?? 'custom');
+  const hasError = status === 'error' || (data.kind === 'entry' && data.traceStatus === 'error');
+  const borderClass = hasError ? 'border-rose-300 dark:border-rose-800' : data.kind === 'output' ? 'border-emerald-200 dark:border-emerald-900' : GROUPED_FLOW_TYPE_BORDER_CLASSES[nodeType];
+  const headerClass = hasError
+    ? 'border-rose-100 bg-rose-50/80 text-rose-700 dark:border-rose-900/50 dark:bg-rose-500/10 dark:text-rose-300'
+    : data.kind === 'output'
       ? 'border-emerald-100 bg-emerald-50/70 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-500/10 dark:text-emerald-300'
       : GROUPED_FLOW_TYPE_HEADER_CLASSES[nodeType];
-  const handleClass = status === 'error' ? '!bg-rose-400' : data.kind === 'output' ? '!bg-emerald-400' : GROUPED_FLOW_TYPE_HANDLE_CLASSES[nodeType];
-  const targetSpan = data.kind === 'entry' ? (data.node?.span ?? data.request?.span) : data.node?.span;
+  const handleClass = hasError ? '!bg-rose-400' : data.kind === 'output' ? '!bg-emerald-400' : GROUPED_FLOW_TYPE_HANDLE_CLASSES[nodeType];
+  const targetSpan = data.kind === 'entry' ? (data.request?.span ?? data.node?.span) : data.node?.span;
+  const isHttps = data.request?.span.attributes['url.scheme'] === 'https' || data.node?.span.attributes['url.scheme'] === 'https';
+  const entryLabel = isHttps ? '↳ HTTPS' : '↳ HTTP';
   const onHeaderClick = (event: React.MouseEvent) => {
     const target = event.target as HTMLElement;
     if (target.closest('button')) return;
     if (targetSpan) {
-      selectSpan(targetSpan, data.kind === 'output' ? 'output' : undefined);
       if (data.detail) {
+        selectSpan(targetSpan, data.kind === 'output' ? 'output' : undefined);
         fit();
-      } else if (data.openedSpanId) {
-        fit({ cardIds: [data.cardId, `detail-${data.openedSpanId}`] });
       } else {
-        fit({ cardIds: [data.cardId] });
+        selectCard(data.cardId, targetSpan, data.kind === 'output' ? 'output' : undefined);
       }
     }
   };
   return (
     <article
-      aria-label={`${data.detail ? 'Detalle' : data.kind === 'entry' ? 'Entrada' : data.kind === 'output' ? 'Salida' : 'Proceso'}: ${data.node?.span.name ?? 'Sin registro'}`}
+      aria-label={`${data.detail ? 'Detalle' : data.kind === 'entry' ? 'Entrada' : data.kind === 'controller' ? 'Controller' : data.kind === 'output' ? 'Salida' : 'Proceso'}: ${data.node?.span.name ?? 'Sin registro'}`}
       id={`card-${data.cardId}`}
       className={`pointer-events-auto relative w-full rounded-xl border bg-white text-zinc-800 shadow-[0_4px_18px_-8px_rgba(24,24,27,0.18)] transition-opacity dark:bg-[#191a21] dark:text-zinc-100 ${borderClass} ${data.highlighted ? '' : 'opacity-30'}`}
     >
-      {data.kind !== 'entry' ? <Handle type="target" position={Position.Left} id="left" className={`!size-2 !border-2 !border-white dark:!border-zinc-800 ${handleClass}`} /> : null}
-      {data.kind !== 'output' && !data.detail ? <Handle type="source" position={Position.Right} id="right" className={`!size-2 !border-2 !border-white dark:!border-zinc-800 ${handleClass}`} /> : null}
+      {data.showLeftHandle ? <Handle type="target" position={Position.Left} id="left" className={`!size-2 !border-2 !border-white dark:!border-zinc-800 ${handleClass}`} /> : null}
+      {data.showRightHandle ? <Handle type="source" position={Position.Right} id="right" className={`!size-2 !border-2 !border-white dark:!border-zinc-800 ${handleClass}`} /> : null}
       <Handle type="target" position={Position.Top} id="top" className="!opacity-0" />
       <Handle type="source" position={Position.Bottom} id="bottom" className="!opacity-0" />
       <Handle type="target" position={Position.Bottom} id="bottom-target" className="!opacity-0" />
       <header onClick={onHeaderClick} className={`flex cursor-pointer items-center justify-between gap-2 rounded-t-xl border-b px-4 py-1.5 ${headerClass}`}>
         <span className="text-[9px] font-semibold tracking-wider uppercase">
-          {data.kind === 'entry' ? '↳ Controller' : data.kind === 'output' ? '↗ Resultado' : `${data.stepLabel} · ${GROUPED_FLOW_TYPE_LABELS[data.node?.span.type ?? 'custom'] ?? 'Operación'}`}
+          {data.kind === 'entry'
+            ? entryIsHttp
+              ? entryLabel
+              : '↳ Controller'
+            : data.kind === 'controller'
+              ? '↳ Controller'
+              : data.kind === 'output'
+                ? '↗ Resultado'
+                : `${data.stepLabel} · ${GROUPED_FLOW_TYPE_LABELS[data.node?.span.type ?? 'custom'] ?? 'Operación'}`}
         </span>
         <span className="flex items-center gap-1.5">
-          <GroupedFlowStatusComponent status={status} />
-          {data.kind === 'process' && data.node ? <span className="font-mono text-[9px] opacity-70">{formatDuration(data.node.span.durationMs)}</span> : null}
+          <GroupedFlowStatusComponent status={hasError ? 'error' : status} />
+          {(data.kind === 'process' || data.kind === 'controller') && data.node ? <span className="font-mono text-[9px] opacity-70">{formatDuration(data.node.span.durationMs)}</span> : null}
           {data.detail ? (
             <button
               className="nodrag nopan ml-1 flex size-5 cursor-pointer items-center justify-center rounded hover:bg-black/5 focus:outline-none focus-visible:outline-2 focus-visible:outline-pink-500 dark:hover:bg-white/10"

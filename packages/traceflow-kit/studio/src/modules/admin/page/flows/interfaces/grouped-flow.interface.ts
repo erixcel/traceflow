@@ -1,5 +1,5 @@
 import type { Edge, Rect } from '@xyflow/react';
-import type { TraceFlowNodeDefinitionDto, TraceFlowStatus } from 'traceflow/protocol';
+import type { TraceFlowNodeDefinitionDto, TraceFlowSpanDto, TraceFlowStatus } from 'traceflow/protocol';
 import type { JourneyNode } from './journey.interface';
 import type { TraceCanvasProps } from './trace-canvas.interface';
 import type { GroupedCardKind, GroupedFlowNode } from '../types/grouped-flow.type';
@@ -20,9 +20,11 @@ export interface GroupedCardData extends Record<string, unknown> {
   openedSpanId: string | undefined;
   kind: GroupedCardKind;
   request: JourneyNode | null;
+  validation: JourneyNode | null;
   node: JourneyNode | null;
   preconditions: JourneyNode[];
   expanded: boolean;
+  visibleDepth: number;
   query: string;
   highlighted: boolean;
   matchedIds: Set<string>;
@@ -31,6 +33,8 @@ export interface GroupedCardData extends Record<string, unknown> {
   isComplete: boolean;
   stepLabel: string;
   unobserved: TraceFlowNodeDefinitionDto[];
+  showLeftHandle: boolean;
+  showRightHandle: boolean;
 }
 
 export interface GroupedLaneData extends Record<string, unknown> {
@@ -62,8 +66,9 @@ export interface FitViewOptions {
 
 export interface GroupedFlowActions {
   selectSpan: TraceCanvasProps['onSelectSpan'];
-  toggleGroup: (spanId: string) => void;
-  openStep: (ownerId: string, spanId: string) => void;
+  selectCard: (cardId: string, span: TraceFlowSpanDto, tab?: 'input' | 'output' | 'context') => void;
+  toggleGroup: (cardId: string, span: TraceFlowSpanDto) => void;
+  openStep: (ownerId: string, span: TraceFlowSpanDto, tab?: 'input' | 'output' | 'context') => void;
   closeDetail: (cardId: string) => void;
   fit: (options?: number | FitViewOptions) => void;
 }
@@ -81,5 +86,12 @@ export interface GroupedStepsProps {
   query: string;
   matchedIds: Set<string>;
   compact?: boolean;
-  nested?: boolean;
+  visibleDepth?: number;
+  openAsCard?: boolean;
+}
+
+export interface GroupedFlowDepthProps {
+  value: number;
+  max: number;
+  onChange: (depth: number) => void;
 }

@@ -13,6 +13,7 @@ import type {
 } from '../interfaces/http-middleware.interface';
 import { toJsonSerializable } from './json.function';
 import { monotonicUnixTime } from './monotonic-time.function';
+import { findMatchingTracedDto } from './validation-schema.function';
 
 /** Creates a Connect-compatible middleware. Register it before guards so every
  * decorated call created during the request inherits the same active context.
@@ -38,19 +39,50 @@ export function createTraceFlowHttpMiddleware(options: TraceFlowHttpMiddlewareOp
     TRACEFLOW_TRACER.startActiveSpan(`${method} ${path}`, { kind: SpanKind.SERVER, startTime: monotonicUnixTime() }, (span) => {
       markHttpRequestSpan(span, request, true);
       let ended = false;
+      const responseChunks: Buffer[] = [];
+
+      if (typeof response.write === 'function' && typeof response.end === 'function') {
+        const originalWrite = response.write.bind(response);
+        const originalEnd = response.end.bind(response);
+
+        response.write = ((chunk: unknown, ...args: unknown[]) => {
+          if (chunk) {
+            try {
+              const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
+              if (responseChunks.length < 50) responseChunks.push(buf);
+            } catch {
+              // ignore
+            }
+          }
+          return Reflect.apply(originalWrite, response, [chunk, ...args]);
+        }) as typeof response.write;
+
+        response.end = ((chunk: unknown, ...args: unknown[]) => {
+          if (chunk && typeof chunk !== 'function') {
+            try {
+              const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
+              if (responseChunks.length < 50) responseChunks.push(buf);
+            } catch {
+              // ignore
+            }
+          }
+          return Reflect.apply(originalEnd, response, [chunk, ...args]);
+        }) as typeof response.end;
+      }
+
       const finish = () => {
         if (ended) return;
         ended = true;
         detachResponseListeners(response, finish, close);
         captureHttpRequest(span, request, capture);
-        finishHttpRequestSpan(span, response);
+        finishHttpRequestSpan(span, response, responseChunks, request);
       };
       const close = () => {
         if (ended) return;
         ended = true;
         detachResponseListeners(response, finish, close);
         captureHttpRequest(span, request, capture);
-        if (response.finished || response.writableEnded) finishHttpRequestSpan(span, response);
+        if (response.finished || response.writableEnded) finishHttpRequestSpan(span, response, responseChunks, request);
         else failHttpRequestSpan(span, new Error('La conexión HTTP terminó antes de completar la respuesta'));
       };
       response.once('finish', finish);
@@ -135,12 +167,68 @@ function markHttpRequestSpan(span: Span, request: TraceFlowHttpRequest, monotoni
   span.setAttribute('traceflow.timing.clock', monotonic ? 'monotonic' : 'opentelemetry');
   span.setAttribute('http.request.method', request.method?.toUpperCase() || 'HTTP');
   span.setAttribute('url.path', getRequestPath(request));
+  const forwardedProto = request.headers?.['x-forwarded-proto'];
+  const scheme = (request as unknown as { protocol?: string }).protocol || (forwardedProto ? String(forwardedProto).split(',')[0]?.trim() : 'http') || 'http';
+  span.setAttribute('url.scheme', scheme);
 }
 
-function finishHttpRequestSpan(span: Span, response: TraceFlowHttpResponse): void {
+function finishHttpRequestSpan(span: Span, response: TraceFlowHttpResponse, responseChunks?: Buffer[], request?: TraceFlowHttpRequest): void {
   const statusCode = response.statusCode ?? 200;
   span.setAttribute('http.response.status_code', statusCode);
-  span.setStatus({ code: statusCode >= 500 ? SpanStatusCode.ERROR : SpanStatusCode.OK, ...(statusCode >= 500 ? { message: `HTTP ${statusCode}` } : {}) });
+
+  let responseData: unknown = undefined;
+  let errorMessage: string | undefined = undefined;
+
+  if (responseChunks && responseChunks.length > 0 && statusCode >= 400) {
+    try {
+      const text = Buffer.concat(responseChunks).toString('utf8');
+      const parsed = JSON.parse(text) as Record<string, unknown>;
+      responseData = parsed;
+      if (parsed && typeof parsed === 'object') {
+        const msg = parsed.message;
+        if (Array.isArray(msg) && msg.length > 0) {
+          errorMessage = msg.join('; ');
+        } else if (typeof msg === 'string') {
+          errorMessage = msg;
+        } else if (typeof parsed.error === 'string') {
+          errorMessage = parsed.error;
+        }
+      }
+    } catch {
+      // not json or parse error
+    }
+  }
+
+  const isError = statusCode >= 400;
+  if (isError) {
+    const message = errorMessage ?? `HTTP ${statusCode}`;
+    span.setStatus({ code: SpanStatusCode.ERROR, message });
+    span.recordException(new Error(message), monotonicUnixTime());
+    if (responseData !== undefined) {
+      span.setAttribute(TRACEFLOW_CAPTURE_ATTRIBUTE_KEYS.output, JSON.stringify(responseData));
+    }
+  } else {
+    span.setStatus({ code: SpanStatusCode.OK });
+  }
+
+  if (request) {
+    const query = readRequestQuery(request);
+    const matchingDto = findMatchingTracedDto({
+      query: query && typeof query === 'object' ? (query as Record<string, unknown>) : undefined,
+      body: request.body && typeof request.body === 'object' ? (request.body as Record<string, unknown>) : undefined,
+      errorMessage,
+    });
+    if (matchingDto) {
+      if (matchingDto.dtoName) {
+        span.setAttribute('traceflow.controller.dto', matchingDto.dtoName);
+      }
+      span.setAttribute('traceflow.validation.schema', JSON.stringify(matchingDto));
+      if (matchingDto.location) {
+        span.setAttribute('traceflow.validation.location', matchingDto.location);
+      }
+    }
+  }
+
   span.end(monotonicUnixTime());
 }
 

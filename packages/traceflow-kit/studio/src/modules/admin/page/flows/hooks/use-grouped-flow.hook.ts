@@ -1,21 +1,46 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import type { NodeChange } from '@xyflow/react';
-import type { TraceFlowTraceDto } from 'traceflow/protocol';
-import { buildGroupedFlowGraph, findSpanForCardId, toggleGroupedDetail } from '../functions/grouped-flow.function';
+import type { TraceFlowSpanDto, TraceFlowTraceDto } from 'traceflow/protocol';
+import { buildGroupedFlowGraph, findSpanForCardId, getGroupedFlowMaxDepth, toggleGroupedDetail } from '../functions/grouped-flow.function';
 import { GROUPED_FLOW_GEOMETRY } from '../constants/grouped-flow.constant';
 import type { FitViewOptions, GroupedDetailSelection } from '../interfaces/grouped-flow.interface';
+import type { TraceCanvasProps } from '../interfaces/trace-canvas.interface';
 import type { TraceNodeDimensions } from '../interfaces/trace-graph.interface';
 import type { GroupedFlowNode } from '../types/grouped-flow.type';
 import { useTraceStore } from '../stores/trace.store';
 
-export function useGroupedFlow(trace: TraceFlowTraceDto) {
+const DEPTH_SESSION_KEY = 'traceflow.grouped-flow.depth';
+
+function readVisibleDepth(traceId: string, max: number): number {
+  try {
+    const saved = Number(window.sessionStorage.getItem(`${DEPTH_SESSION_KEY}.${traceId}`));
+    return Number.isInteger(saved) && saved >= 1 ? Math.min(saved, max) : 1;
+  } catch {
+    return 1;
+  }
+}
+
+function saveVisibleDepth(traceId: string, depth: number): void {
+  try {
+    window.sessionStorage.setItem(`${DEPTH_SESSION_KEY}.${traceId}`, String(depth));
+  } catch {
+    // Studio sigue funcionando cuando el navegador bloquea sessionStorage.
+  }
+}
+
+export function useGroupedFlow(trace: TraceFlowTraceDto, onSelectSpan: TraceCanvasProps['onSelectSpan']) {
   const selectedSpan = useTraceStore((state) => state.selectedSpan);
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  const maxVisibleDepth = useMemo(() => getGroupedFlowMaxDepth(trace), [trace]);
+  const [visibleDepth, setVisibleDepthState] = useState(() => readVisibleDepth(trace.traceId, maxVisibleDepth));
+  const [depthOverrides, setDepthOverrides] = useState<Map<string, number>>(() => new Map());
   const [detailPath, setDetailPath] = useState<GroupedDetailSelection[]>([]);
   const [query, setQuery] = useState('');
   const [dimensions, setDimensions] = useState<Map<string, TraceNodeDimensions>>(() => new Map());
-  const graph = useMemo(() => buildGroupedFlowGraph(trace, collapsed, query.trim(), dimensions, detailPath), [trace, collapsed, query, dimensions, detailPath]);
+  const graph = useMemo(
+    () => buildGroupedFlowGraph(trace, new Set(), query.trim(), dimensions, detailPath, depthOverrides, visibleDepth),
+    [trace, query, dimensions, detailPath, depthOverrides, visibleDepth],
+  );
   const fitted = useRef(false);
   const previousTraceId = useRef<string | null>(null);
   const focusedCardIdsRef = useRef<string[] | null>(null);
@@ -55,8 +80,19 @@ export function useGroupedFlow(trace: TraceFlowTraceDto) {
             const cw =
               dimensions.get(card.id)?.width ??
               (typeof card.style?.width === 'number' ? card.style.width : null) ??
-              (card.id === 'grouped-entry' ? GROUPED_FLOW_GEOMETRY.entryWidth : card.id === 'grouped-output' ? GROUPED_FLOW_GEOMETRY.outputWidth : GROUPED_FLOW_GEOMETRY.processWidth);
-            const fallbackH = card.id === 'grouped-entry' ? GROUPED_FLOW_GEOMETRY.entryHeight : card.id === 'grouped-output' ? GROUPED_FLOW_GEOMETRY.outputHeight : GROUPED_FLOW_GEOMETRY.processHeight;
+              (card.id === 'grouped-entry' || card.id === 'grouped-controller'
+                ? GROUPED_FLOW_GEOMETRY.entryWidth
+                : card.id === 'grouped-output'
+                  ? GROUPED_FLOW_GEOMETRY.outputWidth
+                  : GROUPED_FLOW_GEOMETRY.processWidth);
+            const fallbackH =
+              card.id === 'grouped-entry'
+                ? GROUPED_FLOW_GEOMETRY.entryHeight
+                : card.id === 'grouped-controller'
+                  ? GROUPED_FLOW_GEOMETRY.controllerHeight
+                  : card.id === 'grouped-output'
+                    ? GROUPED_FLOW_GEOMETRY.outputHeight
+                    : GROUPED_FLOW_GEOMETRY.processHeight;
             const ch = dimensions.get(card.id)?.height ?? fallbackH;
 
             minX = Math.min(minX, cx);
@@ -112,9 +148,6 @@ export function useGroupedFlow(trace: TraceFlowTraceDto) {
   const fitRef = useRef(fit);
   fitRef.current = fit;
 
-  const expandable = graph.nodes.filter((node) => node.type === 'groupedCard' && node.data.kind === 'process' && node.data.node?.children.some((child) => child.children.length));
-  const allExpanded = expandable.length > 0 && expandable.every((node) => !collapsed.has(node.id));
-
   // Reset state and trigger auto-fit when changing traces/flows
   useEffect(() => {
     if (previousTraceId.current !== trace.traceId) {
@@ -122,7 +155,8 @@ export function useGroupedFlow(trace: TraceFlowTraceDto) {
       fitted.current = false;
       focusedCardIdsRef.current = null;
       setDetailPath([]);
-      setCollapsed(new Set());
+      setVisibleDepthState(readVisibleDepth(trace.traceId, maxVisibleDepth));
+      setDepthOverrides(new Map());
       setDimensions(new Map());
 
       const timer1 = window.setTimeout(() => fitRef.current({ forceFull: true, duration: 200 }), 100);
@@ -132,7 +166,11 @@ export function useGroupedFlow(trace: TraceFlowTraceDto) {
         window.clearTimeout(timer2);
       };
     }
-  }, [trace.traceId]);
+  }, [maxVisibleDepth, trace.traceId]);
+
+  useEffect(() => {
+    setVisibleDepthState((current) => Math.min(current, maxVisibleDepth));
+  }, [maxVisibleDepth]);
 
   // When panel opens or closes, re-fit view to prevent overlapping
   useEffect(() => {
@@ -152,85 +190,83 @@ export function useGroupedFlow(trace: TraceFlowTraceDto) {
     return () => window.clearTimeout(timer);
   }, [detailPath]);
 
-  const toggleGroup = useCallback((id: string) => {
-    setDetailPath((current) => {
-      const index = current.findIndex((item) => item.ownerId === id);
-      return index < 0 ? current : current.slice(0, index);
-    });
-    setCollapsed((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-    window.setTimeout(() => fitRef.current(300), 80);
-  }, []);
+  const selectCard = useCallback(
+    (cardId: string, span: TraceFlowSpanDto, tab?: 'input' | 'output' | 'context') => {
+      focusedCardIdsRef.current = [cardId];
+      setDetailPath([]);
+      onSelectSpan(span, tab);
+      window.setTimeout(() => fitRef.current({ cardIds: [cardId], duration: 300 }), 30);
+    },
+    [onSelectSpan],
+  );
 
-  const openStep = useCallback(
-    (ownerId: string, spanId: string) => {
-      setDetailPath((current) => {
-        const isCurrentlyOpen = current.some((item) => item.ownerId === ownerId && item.spanId === spanId);
-        const next = toggleGroupedDetail(current, ownerId, spanId);
-        if (isCurrentlyOpen) {
-          const parentSpan = findSpanForCardId(ownerId, trace);
-          if (parentSpan) {
-            useTraceStore.getState().setSelectedSpan(parentSpan);
-          }
-
-          if (next.length === 0) {
-            focusedCardIdsRef.current = [ownerId];
-            window.setTimeout(() => fitRef.current({ cardIds: [ownerId], duration: 300 }), 30);
-          } else {
-            const last = next[next.length - 1];
-            if (last) {
-              focusedCardIdsRef.current = [last.ownerId, `detail-${last.spanId}`];
-              window.setTimeout(() => fitRef.current({ cardIds: [last.ownerId, `detail-${last.spanId}`], duration: 300 }), 30);
-            }
-          }
-        } else {
-          focusedCardIdsRef.current = [ownerId, `detail-${spanId}`];
-          window.setTimeout(() => fitRef.current({ cardIds: [ownerId, `detail-${spanId}`], duration: 320 }), 30);
-        }
+  const toggleGroup = useCallback(
+    (id: string, ownerSpan: TraceFlowSpanDto) => {
+      const detailIndex = detailPath.findIndex((item) => item.ownerId === id);
+      if (detailIndex >= 0) {
+        setDetailPath(detailPath.slice(0, detailIndex));
+        onSelectSpan(ownerSpan);
+      }
+      setDepthOverrides((current) => {
+        const next = new Map(current);
+        const currentDepth = next.get(id) ?? visibleDepth;
+        next.set(id, currentDepth > 1 ? 1 : maxVisibleDepth);
         return next;
       });
+      focusedCardIdsRef.current = [id];
+      window.setTimeout(() => fitRef.current({ cardIds: [id], duration: 300 }), 80);
     },
-    [trace],
+    [detailPath, maxVisibleDepth, onSelectSpan, visibleDepth],
+  );
+
+  const openStep = useCallback(
+    (ownerId: string, span: TraceFlowSpanDto, tab?: 'input' | 'output' | 'context') => {
+      const isCurrentlyOpen = detailPath.some((item) => item.ownerId === ownerId && item.spanId === span.spanId);
+      const next = toggleGroupedDetail(detailPath, ownerId, span.spanId);
+      setDetailPath(next);
+
+      if (isCurrentlyOpen) {
+        onSelectSpan(findSpanForCardId(ownerId, trace), tab);
+      } else {
+        onSelectSpan(span, tab);
+      }
+
+      if (next.length === 0) {
+        focusedCardIdsRef.current = [ownerId];
+        window.setTimeout(() => fitRef.current({ cardIds: [ownerId], duration: 300 }), 30);
+      } else {
+        const last = next[next.length - 1];
+        if (last) {
+          focusedCardIdsRef.current = [last.ownerId, `detail-${last.spanId}`];
+          window.setTimeout(() => fitRef.current({ cardIds: [last.ownerId, `detail-${last.spanId}`], duration: isCurrentlyOpen ? 300 : 320 }), 30);
+        }
+      }
+    },
+    [detailPath, onSelectSpan, trace],
   );
 
   const closeDetail = useCallback(
     (id: string) => {
-      setDetailPath((current) => {
-        const index = current.findIndex((item) => `detail-${item.spanId}` === id);
-        const closedItem = index >= 0 ? current[index] : null;
-        const next = index < 0 ? current : current.slice(0, index);
+      const index = detailPath.findIndex((item) => `detail-${item.spanId}` === id);
+      if (index < 0) return;
+      const closedItem = detailPath[index];
+      if (!closedItem) return;
+      const next = detailPath.slice(0, index);
+      setDetailPath(next);
+      onSelectSpan(findSpanForCardId(closedItem.ownerId, trace));
 
-        if (closedItem) {
-          const parentSpan = findSpanForCardId(closedItem.ownerId, trace);
-          if (parentSpan) {
-            useTraceStore.getState().setSelectedSpan(parentSpan);
-          }
+      if (next.length === 0) {
+        focusedCardIdsRef.current = [closedItem.ownerId];
+        window.setTimeout(() => fitRef.current({ cardIds: [closedItem.ownerId], duration: 300 }), 40);
+      } else {
+        const last = next[next.length - 1];
+        if (last) {
+          focusedCardIdsRef.current = [last.ownerId, `detail-${last.spanId}`];
+          window.setTimeout(() => fitRef.current({ cardIds: [last.ownerId, `detail-${last.spanId}`], duration: 300 }), 40);
         }
-
-        if (next.length === 0) {
-          const ownerCardId = closedItem?.ownerId;
-          if (ownerCardId) {
-            focusedCardIdsRef.current = [ownerCardId];
-            window.setTimeout(() => fitRef.current({ cardIds: [ownerCardId], duration: 300 }), 40);
-          } else {
-            focusedCardIdsRef.current = null;
-            window.setTimeout(() => fitRef.current({ forceFull: true, duration: 300 }), 40);
-          }
-        } else {
-          const last = next[next.length - 1];
-          if (last) {
-            focusedCardIdsRef.current = [last.ownerId, `detail-${last.spanId}`];
-            window.setTimeout(() => fitRef.current({ cardIds: [last.ownerId, `detail-${last.spanId}`], duration: 300 }), 40);
-          }
-        }
-        return next;
-      });
+      }
     },
-    [trace],
+    [detailPath, onSelectSpan, trace],
   );
 
   const onNodesChange = useCallback((changes: NodeChange<GroupedFlowNode>[]) => {
@@ -257,42 +293,47 @@ export function useGroupedFlow(trace: TraceFlowTraceDto) {
     return () => window.cancelAnimationFrame(frame);
   }, [dimensions, graph.nodes]);
 
+  const closeDetails = useCallback(() => {
+    const first = detailPath[0];
+    if (!first) return;
+    onSelectSpan(findSpanForCardId(first.ownerId, trace));
+    focusedCardIdsRef.current = [first.ownerId];
+    setDetailPath([]);
+    window.setTimeout(() => fitRef.current({ cardIds: [first.ownerId], duration: 300 }), 50);
+  }, [detailPath, onSelectSpan, trace]);
+
+  const setVisibleDepth = useCallback(
+    (depth: number) => {
+      const nextDepth = Math.min(Math.max(1, depth), maxVisibleDepth);
+      const first = detailPath[0];
+      if (first) {
+        onSelectSpan(findSpanForCardId(first.ownerId, trace));
+      }
+      focusedCardIdsRef.current = null;
+      setDetailPath([]);
+      setDepthOverrides(new Map());
+      setVisibleDepthState(nextDepth);
+      saveVisibleDepth(trace.traceId, nextDepth);
+      window.setTimeout(() => fitRef.current({ forceFull: true, duration: 300 }), 50);
+    },
+    [detailPath, maxVisibleDepth, onSelectSpan, trace],
+  );
+
   return {
     ...graph,
     query,
     setQuery,
+    selectCard,
     toggleGroup,
     openStep,
     closeDetail,
     hasDetails: detailPath.length > 0,
-    closeDetails: () => {
-      if (detailPath.length > 0) {
-        const first = detailPath[0];
-        if (first) {
-          const parentSpan = findSpanForCardId(first.ownerId, trace);
-          if (parentSpan) {
-            useTraceStore.getState().setSelectedSpan(parentSpan);
-          }
-          focusedCardIdsRef.current = [first.ownerId];
-          setDetailPath([]);
-          window.setTimeout(() => fitRef.current({ cardIds: [first.ownerId], duration: 300 }), 50);
-          return;
-        }
-      }
-      focusedCardIdsRef.current = null;
-      setDetailPath([]);
-      window.setTimeout(() => fitRef.current({ forceFull: true, duration: 300 }), 50);
-    },
+    closeDetails,
     onNodesChange,
     fit,
-    allExpanded,
-    canExpand: expandable.length > 0,
-    toggleAll: () => {
-      focusedCardIdsRef.current = null;
-      setDetailPath([]);
-      setCollapsed(allExpanded ? new Set(expandable.map((node) => node.id)) : new Set());
-      window.setTimeout(() => fitRef.current({ forceFull: true, duration: 300 }), 50);
-    },
+    visibleDepth,
+    maxVisibleDepth,
+    setVisibleDepth,
     matchingGroups: graph.nodes.filter((node) => node.type === 'groupedCard' && node.data.kind === 'process' && node.data.highlighted && node.data.node).length,
   };
 }

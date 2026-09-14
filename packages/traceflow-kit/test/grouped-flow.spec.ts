@@ -1,5 +1,12 @@
 import type { TraceFlowSpanDto, TraceFlowTraceDto } from 'traceflow/protocol';
-import { buildGroupedFlowGraph, buildGroupedFlowModel, findParentSpan, findSpanForCardId, toggleGroupedDetail } from '../studio/src/modules/admin/page/flows/functions/grouped-flow.function';
+import {
+  buildGroupedFlowGraph,
+  buildGroupedFlowModel,
+  findParentSpan,
+  findSpanForCardId,
+  getGroupedFlowMaxDepth,
+  toggleGroupedDetail,
+} from '../studio/src/modules/admin/page/flows/functions/grouped-flow.function';
 import { groupConcurrentSpans } from '../studio/src/modules/admin/page/flows/functions/execution-flow.function';
 import { buildGroupedFlowJson } from '../studio/src/modules/admin/page/flows/functions/grouped-flow-json.function';
 import { descendants } from '../studio/src/modules/admin/page/flows/functions/journey.function';
@@ -167,7 +174,7 @@ describe('grouped execution graph', () => {
     expect(graph.edges.filter((edge) => edge.target === 'grouped-output').every((edge) => edge.style?.strokeDasharray)).toBe(true);
   });
 
-  it('uses an HTTP request as an envelope and shows auth before the controller', () => {
+  it('uses an HTTP request as an envelope and stacks a compact controller below it', () => {
     const data = trace([
       span('request', null, { name: 'GET /dashboard', type: 'custom', attributes: { 'traceflow.http.request_root': true, 'traceflow.timing.clock': 'monotonic' } }),
       span('auth', 'request', { name: 'auth' }),
@@ -181,12 +188,173 @@ describe('grouped execution graph', () => {
     expect(model.entry?.span.spanId).toBe('controller');
     expect(model.preconditions.map((node) => node.span.spanId)).toEqual(['auth']);
     expect(model.branches.map((node) => node.span.spanId)).toEqual(['coordinator']);
-    expect(buildGroupedFlowGraph(data).nodes.filter((node) => node.type === 'groupedCard')).toHaveLength(3);
+    const baseline = buildGroupedFlowGraph(data);
+    expect(baseline.nodes.filter((node) => node.type === 'groupedCard')).toHaveLength(4);
+    const entry = baseline.nodes.find((node) => node.id === 'grouped-entry') as GroupedCardNode;
+    const controller = baseline.nodes.find((node) => node.id === 'grouped-controller') as GroupedCardNode;
+    expect(controller.data).toMatchObject({ kind: 'controller', node: { span: { spanId: 'controller' }, children: [{ span: { spanId: 'coordinator' }, children: [] }] } });
+    expect(controller.position.x).toBe(entry.position.x);
+    expect(controller.position.y).toBeGreaterThan(entry.position.y);
+    expect(baseline.edges.find((edge) => edge.id === 'grouped-grouped-entry-grouped-controller')).toMatchObject({
+      source: 'grouped-entry',
+      target: 'grouped-controller',
+      sourceHandle: 'bottom',
+      targetHandle: 'top',
+    });
+    expect(baseline.edges.find((edge) => edge.target === 'coordinator')?.source).toBe('grouped-controller');
     const graph = buildGroupedFlowGraph(data, new Set(), '', new Map(), [{ ownerId: 'grouped-entry', spanId: 'auth' }]);
     const auth = graph.nodes.find((node) => node.id === 'detail-auth') as GroupedCardNode;
+    const entryLane = graph.nodes.find((node) => node.id === 'lane-entry')!;
+    const processLane = graph.nodes.find((node) => node.id === 'lane-process')!;
+    const entryBoundary = entryLane.position.x + Number(entryLane.style?.width);
     expect(auth.data.node?.children.map((node) => node.span.spanId)).toEqual(['user']);
     expect(auth.position.x).toBeLessThan(graph.nodes.find((node) => node.id === 'coordinator')!.position.x);
+    expect(auth.position.x + Number(auth.style?.width)).toBeLessThan(entryBoundary);
+    expect(entryBoundary).toBe(processLane.position.x);
     expect(graph.edges.find((edge) => edge.id === 'inspect-grouped-entry-auth')).toMatchObject({ sourceHandle: 'step-auth', target: 'detail-auth' });
+
+    const nestedGraph = buildGroupedFlowGraph(data, new Set(), '', new Map(), [
+      { ownerId: 'grouped-entry', spanId: 'auth' },
+      { ownerId: 'detail-auth', spanId: 'user' },
+    ]);
+    const user = nestedGraph.nodes.find((node) => node.id === 'detail-user') as GroupedCardNode;
+    const nestedEntryLane = nestedGraph.nodes.find((node) => node.id === 'lane-entry')!;
+    const nestedBoundary = nestedEntryLane.position.x + Number(nestedEntryLane.style?.width);
+    expect(user.position.x + Number(user.style?.width)).toBeLessThan(nestedBoundary);
+    expect(nestedBoundary).toBe(nestedGraph.nodes.find((node) => node.id === 'lane-process')?.position.x);
+  });
+
+  it('opens a validation detail card extra to the right of the entry card', () => {
+    const data = trace([
+      span('request', null, {
+        input: {
+          query: { startDate: '2024-01-01' },
+          authorization: 'Bearer secret',
+          headers: { authorization: 'Bearer secret' },
+        },
+        attributes: {
+          'traceflow.http.request_root': true,
+          'http.request.method': 'GET',
+          'url.path': '/test',
+        },
+      }),
+      span('controller', 'request', {
+        type: 'controller',
+        attributes: {
+          'traceflow.controller.dto': 'TestDto',
+          'traceflow.validation.schema': JSON.stringify({
+            dtoName: 'TestDto',
+            location: 'query',
+            parameters: [{ name: 'startDate', type: 'string', required: true, rules: ['isDateString'] }],
+          }),
+        },
+      }),
+    ]);
+    const graph = buildGroupedFlowGraph(data, new Set(), '', new Map(), [{ ownerId: 'grouped-entry', spanId: 'validation-TestDto' }]);
+    const entry = graph.nodes.find((node) => node.id === 'grouped-entry') as GroupedCardNode;
+    const valDetail = graph.nodes.find((node) => node.id === 'detail-validation-TestDto') as GroupedCardNode;
+    expect(entry.data.validation?.span.spanId).toBe('validation-TestDto');
+    expect(valDetail).toBeDefined();
+    expect(valDetail.data.node?.span.type).toBe('validation');
+    expect(valDetail.data.node?.span.name).toBe('Validación');
+    expect(valDetail.data.node?.span.className).toBe('TestDto');
+    expect(valDetail.data.node?.span.methodName).toBeNull();
+    expect(valDetail.data.node?.span.input).toEqual({ startDate: '2024-01-01' });
+    expect(valDetail.data.node?.span.output).toEqual({ valid: true });
+    expect(JSON.stringify(valDetail.data.node?.span.input)).not.toContain('authorization');
+    expect(graph.edges.find((edge) => edge.id === 'inspect-grouped-entry-validation-TestDto')).toMatchObject({
+      source: 'grouped-entry',
+      target: 'detail-validation-TestDto',
+      sourceHandle: 'step-validation-TestDto',
+      targetHandle: 'left',
+    });
+  });
+
+  it('opens a validation detail card on a 400 error request without controller span', () => {
+    const data = trace([
+      span('request', null, {
+        attributes: {
+          'traceflow.http.request_root': true,
+          'http.request.method': 'GET',
+          'url.path': '/admin/dashboard/transactions',
+          'http.response.status_code': 400,
+          'traceflow.controller.dto': 'DashboardFilterDto',
+          'traceflow.validation.schema': JSON.stringify({
+            dtoName: 'DashboardFilterDto',
+            location: 'query',
+            parameters: [{ name: 'type', type: 'string', required: false, enum: ['all', 'bath', 'treatment', 'income'] }],
+          }),
+        },
+        error: { name: 'ValidationError', message: 'type must be one of the following values: all, bath, treatment, income' },
+        status: 'error',
+      }),
+    ]);
+    const graph = buildGroupedFlowGraph(data, new Set(), '', new Map(), [{ ownerId: 'grouped-entry', spanId: 'validation-DashboardFilterDto' }]);
+    const valDetail = graph.nodes.find((node) => node.id === 'detail-validation-DashboardFilterDto') as GroupedCardNode;
+    expect(valDetail).toBeDefined();
+    expect(valDetail.data.node?.span.type).toBe('validation');
+    expect(valDetail.data.node?.span.status).toBe('error');
+    expect(valDetail.data.node?.span.name).toBe('Validación');
+  });
+
+  it('keeps only direct services as collapsible controller steps instead of duplicating their process trees', () => {
+    const data = trace([
+      span('request', null, { type: 'http', attributes: { 'traceflow.http.request_root': true } }),
+      span('controller', 'request', {
+        name: 'Obtener transacciones del dashboard',
+        type: 'controller',
+        className: 'DashboardController',
+        methodName: 'getTransactions',
+        input: { startDate: '2024-01-01' },
+        output: { data: [] },
+      }),
+      span('service', 'controller', { name: 'Dashboard transactions' }),
+    ]);
+
+    const graph = buildGroupedFlowGraph(data);
+    const entry = graph.nodes.find((node) => node.id === 'grouped-entry') as GroupedCardNode;
+    const controllerCard = graph.nodes.find((node) => node.id === 'grouped-controller') as GroupedCardNode;
+    expect(entry.data.openedSpanId).toBeUndefined();
+    expect(controllerCard.data).toMatchObject({
+      kind: 'controller',
+      detail: false,
+      expanded: true,
+      node: { span: { spanId: 'controller', type: 'controller' }, children: [{ span: { spanId: 'service' }, children: [] }] },
+    });
+    expect(graph.nodes.some((node) => node.id === 'detail-controller')).toBe(false);
+    expect(controllerCard.position.x).toBe(entry.position.x);
+    expect(controllerCard.position.y).toBeGreaterThan(entry.position.y);
+    expect(graph.edges.find((edge) => edge.id === 'grouped-grouped-entry-grouped-controller')).toMatchObject({
+      source: 'grouped-entry',
+      target: 'grouped-controller',
+      sourceHandle: 'bottom',
+      targetHandle: 'top',
+    });
+    expect(graph.edges.find((edge) => edge.target === 'service')?.source).toBe('grouped-controller');
+    expect(findSpanForCardId('grouped-controller', data)?.spanId).toBe('controller');
+
+    const collapsedController = buildGroupedFlowGraph(data, new Set(['grouped-controller'])).nodes.find((node) => node.id === 'grouped-controller') as GroupedCardNode;
+    expect(collapsedController.data.expanded).toBe(false);
+    expect(collapsedController.data.node?.children.map((node) => node.span.spanId)).toEqual(['service']);
+  });
+
+  it('calculates selectable hierarchy levels and starts cards at level 1', () => {
+    const data = trace([
+      span('request', null, { type: 'http', attributes: { 'traceflow.http.request_root': true } }),
+      span('auth', 'request'),
+      span('controller', 'request', { type: 'controller' }),
+      span('service', 'controller'),
+      span('method', 'service', { type: 'method' }),
+      span('query', 'method', { type: 'table' }),
+      span('transform', 'query', { type: 'transformation' }),
+    ]);
+    const graph = buildGroupedFlowGraph(data, new Set(), '', new Map(), [], new Map(), 1);
+
+    expect(getGroupedFlowMaxDepth(data)).toBe(3);
+    expect(graph.nodes.filter((node) => node.type === 'groupedCard').every((node) => node.data.visibleDepth === 1 && node.data.expanded === false)).toBe(true);
+
+    const secondLevel = buildGroupedFlowGraph(data, new Set(), '', new Map(), [], new Map(), 2);
+    expect(secondLevel.nodes.find((node) => node.id === 'service')?.data).toMatchObject({ visibleDepth: 2, expanded: true });
   });
 
   it('keeps pagination after the parallel queries inside the same service and in JSON', () => {
@@ -206,6 +374,7 @@ describe('grouped execution graph', () => {
     const graph = buildGroupedFlowGraph(data, new Set(), '', new Map(), [{ ownerId: 'coordinator', spanId: 'bath' }]);
     const parent = graph.nodes.find((node) => node.id === 'coordinator')!;
     const detail = graph.nodes.find((node) => node.id === 'detail-bath') as GroupedCardNode;
+    const output = graph.nodes.find((node) => node.id === 'grouped-output') as GroupedCardNode;
     expect(parent.data.openedSpanId).toBe('bath');
     expect(detail.data).toMatchObject({ detail: true, node: { span: { spanId: 'bath' } } });
     expect(detail.data.node!.children.map((node) => node.span.spanId)).toEqual(['pet']);
@@ -214,6 +383,9 @@ describe('grouped execution graph', () => {
     expect(graph.edges.filter((edge) => !edge.id.startsWith('inspect-')).map((edge) => [edge.source, edge.target])).toEqual(baseline.edges.map((edge) => [edge.source, edge.target]));
     expect(graph.edges.some((edge) => edge.source === 'detail-bath' && edge.target === 'grouped-output')).toBe(false);
     expect(graph.edges.find((edge) => edge.target === 'grouped-output')?.type).toBe('groupedReturn');
+    expect(parent.data.showRightHandle).toBe(false);
+    expect(output.data.showLeftHandle).toBe(false);
+    expect(detail.data.showLeftHandle).toBe(true);
   });
 
   it('drills deeper, switches siblings and closes a branch without orphaned detail cards', () => {
@@ -271,7 +443,7 @@ describe('grouped execution graph', () => {
     });
 
     const entrySpan = findSpanForCardId('grouped-entry', data);
-    expect(entrySpan?.spanId).toBe('controller');
+    expect(entrySpan?.spanId).toBe('request');
 
     const resultSpan = findSpanForCardId('grouped-output', data);
     expect(resultSpan?.spanId).toBe('output-result');
@@ -294,7 +466,7 @@ describe('grouped execution graph', () => {
 
     const authSpan = data.spans.find((s) => s.spanId === 'auth')!;
     const parentOfAuth = findParentSpan(authSpan, data, 'grouped-entry');
-    expect(parentOfAuth?.spanId).toBe('controller');
+    expect(parentOfAuth?.spanId).toBe('request');
 
     const petSpan = data.spans.find((s) => s.spanId === 'pet')!;
     const parentOfPet = findParentSpan(petSpan, data, 'detail-bath');

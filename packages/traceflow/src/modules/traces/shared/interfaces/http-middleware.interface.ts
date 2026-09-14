@@ -14,6 +14,8 @@ export interface TraceFlowHttpResponse {
   statusCode?: number;
   finished?: boolean;
   writableEnded?: boolean;
+  write?(chunk: unknown, ...args: unknown[]): unknown;
+  end?(chunk?: unknown, ...args: unknown[]): unknown;
   once(event: 'finish' | 'close', listener: () => void): unknown;
   off?(event: 'finish' | 'close', listener: () => void): unknown;
 }

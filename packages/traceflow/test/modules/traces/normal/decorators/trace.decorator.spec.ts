@@ -1,3 +1,4 @@
+import 'reflect-metadata';
 import type { Span } from '@opentelemetry/api';
 import { Trace } from '../../../../../src';
 import { TRACEFLOW_ATTRIBUTE_KEYS, TRACEFLOW_CAPTURE_ATTRIBUTE_KEYS } from '../../../../../src/modules/settings/constants';
@@ -24,6 +25,23 @@ describe('@Trace', () => {
     expect(span.setAttribute).toHaveBeenCalledWith(TRACEFLOW_ATTRIBUTE_KEYS.labels, ['module']);
     expect(span.setAttribute).toHaveBeenCalledWith(TRACEFLOW_CAPTURE_ATTRIBUTE_KEYS.input, JSON.stringify({ total: 25, page: 2, limit: 10 }));
     expect(span.setAttribute).toHaveBeenCalledWith(TRACEFLOW_CAPTURE_ATTRIBUTE_KEYS.output, JSON.stringify({ total: 25, page: 2, limit: 10, totalPages: 3 }));
+  });
+
+  it('decorates a DTO class with @Trace({ type: "validation" })', () => {
+    @Trace({ type: 'validation', description: 'Filtros de búsqueda' })
+    class SampleFilterDto {
+      startDate!: string;
+    }
+
+    expect(Reflect.getMetadata(TRACEFLOW_ATTRIBUTE_KEYS.nodeType, SampleFilterDto)).toBe('validation');
+    expect(Reflect.getMetadata(TRACEFLOW_ATTRIBUTE_KEYS.nodeDescription, SampleFilterDto)).toBe('Filtros de búsqueda');
+  });
+
+  it('decorates a DTO class using shorthand @Trace("validation")', () => {
+    @Trace('validation')
+    class SimpleDto {}
+
+    expect(Reflect.getMetadata(TRACEFLOW_ATTRIBUTE_KEYS.nodeType, SimpleDto)).toBe('validation');
   });
 });
 

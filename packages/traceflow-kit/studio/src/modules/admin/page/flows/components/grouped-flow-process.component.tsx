@@ -10,28 +10,26 @@ import { GroupedFlowStepsComponent } from './grouped-flow-steps.component';
 import { GroupedFlowStepDataComponent } from './grouped-flow-step-data.component';
 
 export function GroupedFlowProcessComponent({ data }: GroupedCardProps): React.JSX.Element {
-  const { selectSpan, toggleGroup, fit } = useContext(GroupedFlowContext);
+  const { selectSpan, selectCard, toggleGroup, fit } = useContext(GroupedFlowContext);
   const node = data.node;
   if (!node) return <p className="p-5 text-xs leading-5 text-zinc-500 dark:text-zinc-400">No se registraron llamadas internas.</p>;
   const steps = descendants(node);
   const resources = getResources([node.span, ...steps]);
   const errors = steps.filter((span) => span.status === 'error').length;
-  const canCollapse = node.children.some((child) => child.children.length);
+  const isControllerCard = data.kind === 'controller';
+  const visibleStepCount = isControllerCard ? node.children.length : steps.length;
+  const canCollapse = node.children.some((child) => child.children.length > 0);
+  const selectProcess = () => {
+    if (data.detail) {
+      selectSpan(node.span);
+      fit();
+    } else {
+      selectCard(data.cardId, node.span);
+    }
+  };
   return (
     <>
-      <div
-        className="cursor-pointer px-4 pt-2.5 pb-2"
-        onClick={() => {
-          selectSpan(node.span);
-          if (data.detail) {
-            fit();
-          } else if (data.openedSpanId) {
-            fit({ cardIds: [data.cardId, `detail-${data.openedSpanId}`] });
-          } else {
-            fit({ cardIds: [data.cardId] });
-          }
-        }}
-      >
+      <div className="cursor-pointer px-4 pt-2.5 pb-2" onClick={selectProcess}>
         {isDatabaseQuery(node.span) ? (
           <DatabaseQuerySummaryComponent span={node.span} />
         ) : (
@@ -63,36 +61,41 @@ export function GroupedFlowProcessComponent({ data }: GroupedCardProps): React.J
           <p className="mt-2 text-[10px] text-rose-600 dark:text-rose-300">{errors} pasos internos con error</p>
         ) : null}
       </div>
-      {steps.length ? (
+      {visibleStepCount ? (
         <div id={`steps-${data.cardId}`} className="nodrag nopan border-t border-zinc-100 bg-zinc-50/70 px-2 py-2 dark:border-zinc-800 dark:bg-zinc-950/25">
           <p className="mb-2 flex items-center justify-between px-2 text-[9px] text-zinc-400">
             <span className="font-semibold tracking-wide uppercase">Secuencia interna</span>
-            <span>Abrir paso ↗</span>
+            <span>{isControllerCard ? 'Ir al proceso ↗' : 'Abrir paso ↗'}</span>
           </p>
-          <GroupedFlowStepsComponent nodes={node.children} ownerId={data.cardId} openedSpanId={data.openedSpanId} query={data.query} matchedIds={data.matchedIds} nested={data.expanded} />
+          <GroupedFlowStepsComponent
+            nodes={node.children}
+            ownerId={data.cardId}
+            openedSpanId={data.openedSpanId}
+            query={data.query}
+            matchedIds={data.matchedIds}
+            visibleDepth={isControllerCard ? 1 : data.visibleDepth}
+            openAsCard={isControllerCard}
+          />
         </div>
       ) : null}
-      {data.detail ? <GroupedFlowStepDataComponent span={node.span} /> : null}
+      {data.detail || isControllerCard ? <GroupedFlowStepDataComponent span={node.span} /> : null}
       <div className="flex items-center justify-between gap-3 rounded-b-xl border-t border-zinc-100 px-4 py-1.5 dark:border-zinc-800">
         {canCollapse ? (
-          <button className={GROUPED_FLOW_LINK_CLASS} aria-expanded={data.expanded} aria-controls={`steps-${data.cardId}`} disabled={Boolean(data.query)} onClick={() => toggleGroup(data.cardId)}>
-            {data.expanded ? 'Contraer pasos' : `Ver ${steps.length} pasos`} <span aria-hidden="true">{data.expanded ? '⌃' : '⌄'}</span>
+          <button
+            className={GROUPED_FLOW_LINK_CLASS}
+            aria-expanded={data.expanded}
+            aria-controls={`steps-${data.cardId}`}
+            disabled={Boolean(data.query)}
+            onClick={() => toggleGroup(data.cardId, node.span)}
+          >
+            {data.expanded ? 'Mostrar solo nivel 1' : 'Ver niveles internos'} <span aria-hidden="true">{data.expanded ? '⌃' : '⌄'}</span>
           </button>
         ) : (
-          <span className="text-[10px] text-zinc-400">{steps.length ? `${steps.length} ${steps.length === 1 ? 'paso interno' : 'pasos internos'}` : 'Sin llamadas internas'}</span>
+          <span className="text-[10px] text-zinc-400">{visibleStepCount ? `${visibleStepCount} ${visibleStepCount === 1 ? 'paso interno' : 'pasos internos'}` : 'Sin llamadas internas'}</span>
         )}
         <button
           className="nodrag nopan cursor-pointer text-[10px] text-zinc-500 hover:text-pink-600 focus-visible:outline-2 focus-visible:outline-pink-500 dark:text-zinc-400 dark:hover:text-pink-300"
-          onClick={() => {
-            selectSpan(node.span);
-            if (data.detail) {
-              fit();
-            } else if (data.openedSpanId) {
-              fit({ cardIds: [data.cardId, `detail-${data.openedSpanId}`] });
-            } else {
-              fit({ cardIds: [data.cardId] });
-            }
-          }}
+          onClick={selectProcess}
         >
           Detalles ↗
         </button>

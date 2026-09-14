@@ -12,14 +12,14 @@ describe('Studio HTTP input preferences', () => {
     };
     const preferences = cloneDefaultHttpInputPreferences();
 
-    expect(getVisibleHttpInputSections(input, preferences).map((section) => section.key)).toEqual(['query', 'authorization']);
-    expect(filterHttpInput(input, preferences)).toEqual({ query: { page: '1' }, authorization: 'Bearer token' });
+    expect(getVisibleHttpInputSections(input, preferences).map((section) => section.key)).toEqual(['query', 'authorization', 'headers']);
+    expect(filterHttpInput(input, preferences)).toEqual({ query: { page: '1' }, authorization: 'Bearer token', headers: { accept: 'application/json' } });
   });
 
   it('can show captured empty sections when requested', () => {
     const preferences = cloneDefaultHttpInputPreferences();
     preferences.hideEmpty = false;
-    expect(getVisibleHttpInputSections({ query: {} }, preferences).map((section) => section.key)).toEqual(['query', 'formData', 'body', 'authorization']);
-    expect(preferences.visible).toMatchObject({ cookies: false, headers: false });
+    expect(getVisibleHttpInputSections({ query: {} }, preferences).map((section) => section.key)).toEqual(['query', 'formData', 'body', 'authorization', 'headers']);
+    expect(preferences.visible).toMatchObject({ cookies: false, headers: true });
   });
 });

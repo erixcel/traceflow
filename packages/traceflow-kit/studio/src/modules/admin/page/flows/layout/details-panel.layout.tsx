@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { statusBadgeClass } from '../../../functions/style.function';
 import { formatDuration } from '../../../functions/format.function';
 import { formatDateTime, formatMethodLabel, shortId } from '../functions/format.function';
 import { getDatabaseOperation, isDatabaseQuery } from '../functions/database-query.function';
@@ -7,6 +6,7 @@ import { filterHttpInput } from '../functions/http-input.function';
 import { getTraceDataSections } from '../functions/trace-data.function';
 import { JsonViewerComponent } from '../components/json-viewer.component';
 import { DatabaseQuerySummaryComponent } from '../components/database-query-summary.component';
+import { GroupedFlowStatusComponent } from '../components/grouped-flow-status.component';
 import { ValidationContractComponent } from '../components/validation-contract.component';
 import { getValidationContract } from '../functions/validation-contract.function';
 import { DETAILS_PANEL_ERROR_THEME, DETAILS_PANEL_OUTPUT_THEME, DETAILS_PANEL_TYPE_THEMES, GROUPED_FLOW_TYPE_LABELS } from '../constants/grouped-flow.constant';
@@ -66,10 +66,10 @@ export function DetailsPanelLayout({ span, onClose, initialTab = 'input', onTabC
       <header className={`flex items-start justify-between border-b px-5 py-4 ${theme.headerClass}`}>
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className={statusBadgeClass(span.status)}>{span.status}</span>
             <span className={`inline-flex h-5 items-center rounded-full border px-2 text-[9px] font-bold tracking-wide uppercase ${theme.typeBadgeClass}`}>
-              {isOutput ? 'RESULTADO' : (GROUPED_FLOW_TYPE_LABELS[span.type] ?? span.type)}
+              {isOutput ? 'RESULTADO' : span.type === 'http' ? (span.attributes['url.scheme'] === 'https' ? 'HTTPS' : 'HTTP') : (GROUPED_FLOW_TYPE_LABELS[span.type] ?? span.type)}
             </span>
+            <GroupedFlowStatusComponent status={span.status} />
           </div>
           <h2 className="mt-2 truncate text-lg font-bold tracking-tight">{panelTitle}</h2>
         </div>
@@ -130,7 +130,7 @@ export function DetailsPanelLayout({ span, onClose, initialTab = 'input', onTabC
                 <p className="mt-2 break-words">{span.error.message}</p>
               </div>
             ) : null}
-            {tab === 'input' && validationContract ? (
+            {tab === 'input' && validationContract && !requestRoot ? (
               <div className="mt-4 mb-3 grid w-full grid-cols-2 rounded-lg border border-zinc-200/80 bg-zinc-100/60 p-0.5 text-xs dark:border-zinc-800 dark:bg-zinc-900/60">
                 <button
                   type="button"
@@ -148,7 +148,7 @@ export function DetailsPanelLayout({ span, onClose, initialTab = 'input', onTabC
                 </button>
               </div>
             ) : null}
-            {tab === 'input' && validationContract && inputViewMode === 'contract' ? (
+            {tab === 'input' && validationContract && !requestRoot && inputViewMode === 'contract' ? (
               <ValidationContractComponent contract={validationContract} input={visibleInput} />
             ) : (
               <TraceDataSection

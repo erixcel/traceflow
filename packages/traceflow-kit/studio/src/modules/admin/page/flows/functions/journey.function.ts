@@ -58,8 +58,11 @@ export function getOutputSummary(span: TraceFlowSpanDto): string {
 }
 
 export function summarizeValue(value: JsonValue): string {
-  if (Array.isArray(value)) return `${value.length} elementos`;
-  if (value && typeof value === 'object') return `${Object.keys(value).length} campos`;
+  if (Array.isArray(value)) return `${value.length} ${value.length === 1 ? 'elemento' : 'elementos'}`;
+  if (value && typeof value === 'object') {
+    const count = Object.keys(value).length;
+    return `${count} ${count === 1 ? 'campo' : 'campos'}`;
+  }
   const text = String(value);
   return text.length > 96 ? `${text.slice(0, 96)}…` : text;
 }

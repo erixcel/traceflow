@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsDateString, IsNumber, IsOptional, IsIn, IsInt, Min } from 'class-validator';
-import { extractValidationContract, getValidationSchemaAttributes } from '../../../../../src/modules/traces/shared/functions/validation-schema.function';
+import { extractValidationContract, findMatchingTracedDto, getValidationSchemaAttributes, registerTracedDto } from '../../../../../src/modules/traces/shared/functions/validation-schema.function';
 
 describe('validation schema extraction', () => {
   class DashboardFilterDto {
@@ -102,5 +102,18 @@ describe('validation schema extraction', () => {
 
     const attrs = getValidationSchemaAttributes(RegularService, RegularService.prototype.doWork, [5]);
     expect(attrs).toEqual({});
+  });
+
+  it('registers and matches DTO from query parameters and error message', () => {
+    registerTracedDto(DashboardFilterDto);
+
+    const match = findMatchingTracedDto({
+      query: { startDate: '2024-01-01', endDate: '2024-01-31', type: 'invalid' },
+      errorMessage: 'type must be one of the following values: all, bath, treatment, income',
+    });
+
+    expect(match).not.toBeNull();
+    expect(match?.dtoName).toBe('DashboardFilterDto');
+    expect(match?.parameters).toHaveLength(6);
   });
 });

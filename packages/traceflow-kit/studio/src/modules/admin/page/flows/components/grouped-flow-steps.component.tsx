@@ -10,8 +10,18 @@ import type { GroupedStepsProps } from '../interfaces/grouped-flow.interface';
 import { DatabaseQuerySummaryComponent } from './database-query-summary.component';
 import { GroupedFlowStatusComponent } from './grouped-flow-status.component';
 
-export function GroupedFlowStepsComponent({ nodes, ownerId, openedSpanId, query, matchedIds, compact = false, nested = true, prefix = '' }: GroupedStepsProps): React.JSX.Element {
-  const { openStep, selectSpan } = useContext(GroupedFlowContext);
+export function GroupedFlowStepsComponent({
+  nodes,
+  ownerId,
+  openedSpanId,
+  query,
+  matchedIds,
+  compact = false,
+  visibleDepth = Number.POSITIVE_INFINITY,
+  openAsCard = false,
+  prefix = '',
+}: GroupedStepsProps): React.JSX.Element {
+  const { openStep, selectCard } = useContext(GroupedFlowContext);
   const groups = groupConcurrentSpans(nodes.map((node) => node.span));
   const byId = new Map(nodes.map((node) => [node.span.spanId, node]));
   return (
@@ -33,23 +43,21 @@ export function GroupedFlowStepsComponent({ nodes, ownerId, openedSpanId, query,
             {group.map((span, branchIndex) => {
               const node = byId.get(span.spanId)!;
               const label = `${prefix}${groupIndex + 1}${group.length > 1 ? String.fromCharCode(65 + branchIndex) : ''}`;
-              const selected = openedSpanId === span.spanId;
+              const selected = !openAsCard && openedSpanId === span.spanId;
               return (
                 <div key={span.spanId} className={query && !matchedIds.has(span.spanId) ? 'opacity-35' : ''}>
                   <div className="relative">
                     <button
                       type="button"
                       onClick={() => {
-                        openStep(ownerId, span.spanId);
-                        if (!selected) {
-                          selectSpan(span);
-                        }
+                        if (openAsCard) selectCard(span.spanId, span);
+                        else openStep(ownerId, span);
                       }}
-                      aria-label={`${selected ? 'Cerrar' : 'Abrir'} paso ${label}: ${span.name}`}
+                      aria-label={`${openAsCard ? 'Ir al' : selected ? 'Cerrar' : 'Abrir'} paso ${label}: ${span.name}`}
                       aria-expanded={selected}
                       aria-controls={selected ? `card-detail-${span.spanId}` : undefined}
                       className={`nodrag nopan group flex min-h-9 w-full cursor-pointer items-center gap-1.5 rounded-md border-l-2 px-2 py-1.5 text-left transition focus-visible:outline-2 focus-visible:outline-pink-500 ${selected ? 'bg-zinc-100 ring-1 ring-zinc-200 dark:bg-zinc-800 dark:ring-zinc-600' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800'} ${GROUPED_FLOW_TYPE_STEP_CLASSES[span.type]}`}
-                      title={`${formatMethodLabel(span)} · ${selected ? 'Cerrar tarjeta' : 'Abrir tarjeta a la derecha'}`}
+                      title={`${formatMethodLabel(span)} · ${openAsCard ? 'Ir a la tarjeta del proceso' : selected ? 'Cerrar tarjeta' : 'Abrir tarjeta a la derecha'}`}
                     >
                       <span className="flex min-w-5 shrink-0 items-center justify-center rounded bg-zinc-100 px-1 py-0.5 font-mono text-[8px] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
                         {label}
@@ -72,9 +80,18 @@ export function GroupedFlowStepsComponent({ nodes, ownerId, openedSpanId, query,
                     </button>
                     {selected ? <Handle type="source" position={Position.Right} id={`step-${span.spanId}`} className="!size-1.5 !border-0 !bg-zinc-400" /> : null}
                   </div>
-                  {nested && node.children.length ? (
+                  {visibleDepth > 1 && node.children.length ? (
                     <div className="mt-0.5 mb-1 ml-3 border-l border-zinc-200 pl-1.5 dark:border-zinc-700">
-                      <GroupedFlowStepsComponent nodes={node.children} ownerId={ownerId} openedSpanId={openedSpanId} query={query} matchedIds={matchedIds} compact prefix={`${label}.`} />
+                      <GroupedFlowStepsComponent
+                        nodes={node.children}
+                        ownerId={ownerId}
+                        openedSpanId={openedSpanId}
+                        query={query}
+                        matchedIds={matchedIds}
+                        compact
+                        visibleDepth={visibleDepth - 1}
+                        prefix={`${label}.`}
+                      />
                     </div>
                   ) : null}
                 </div>

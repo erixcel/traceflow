@@ -18,7 +18,7 @@ export const DEFAULT_HTTP_INPUT_PREFERENCES: Readonly<HttpInputPreferences> = {
     cookies: false,
     body: true,
     authorization: true,
-    headers: false,
+    headers: true,
   },
   hideEmpty: true,
 };

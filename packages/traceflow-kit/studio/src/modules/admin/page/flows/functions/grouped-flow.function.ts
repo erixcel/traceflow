@@ -8,17 +8,28 @@ import type { TraceNodeDimensions } from '../interfaces/trace-graph.interface';
 import type { GroupedFlowNode } from '../types/grouped-flow.type';
 import { groupConcurrentSpans } from './execution-flow.function';
 import { buildJourney, descendants, getSearchIds, getUnobservedNodes } from './journey.function';
+import { getValidationContract, getValidationInput } from './validation-contract.function';
+import { getTraceDataSections } from './trace-data.function';
 
 /** Keep parentage intact: a service's children stay inside it, in observed order. */
 export function buildGroupedFlowModel(trace: TraceFlowTraceDto): GroupedFlowModel {
   const roots = buildJourney(trace);
   const envelope = roots.length === 1 && roots[0]?.span.attributes['traceflow.http.request_root'] === true ? roots[0] : null;
-  const entry = envelope ? findFirstController(envelope) : roots.length === 1 && roots[0]?.span.parentSpanId === null ? roots[0] : null;
-  const preconditions = envelope && entry ? envelope.children.filter((node) => node !== entry) : [];
-  const branches = entry ? entry.children : roots;
+  const controller = envelope ? findFirstController(envelope) : null;
+  const entry = controller ?? (envelope ? envelope : roots.length === 1 && roots[0]?.span.parentSpanId === null ? roots[0] : null);
+  const preconditions = envelope ? (controller ? envelope.children.filter((node) => node !== controller) : envelope.children) : [];
+  const branches = controller ? controller.children : envelope ? [] : entry ? entry.children : roots;
   const byId = new Map(branches.map((node) => [node.span.spanId, node]));
-  const groups = entry ? groupConcurrentSpans(branches.map((node) => node.span)).map((group) => group.map((span) => byId.get(span.spanId)!)) : [branches];
+  const groups = entry && branches.length ? groupConcurrentSpans(branches.map((node) => node.span)).map((group) => group.map((span) => byId.get(span.spanId)!)) : branches.length ? [branches] : [];
   return { request: envelope, entry, preconditions, branches, groups, unobserved: getUnobservedNodes(trace), linked: entry !== null };
+}
+
+/** Maximum hierarchy shown by the level selector (1, 1.1, 1.1.1, ...). */
+export function getGroupedFlowMaxDepth(trace: TraceFlowTraceDto): number {
+  const model = buildGroupedFlowModel(trace);
+  const validationNode = buildValidationNode(trace, model);
+  const depth = (nodes: JourneyNode[]): number => (nodes.length ? 1 + Math.max(...nodes.map((node) => depth(node.children))) : 0);
+  return Math.max(1, depth([...model.preconditions, ...(validationNode ? [validationNode] : [])]), ...model.branches.map((node) => depth(node.children)));
 }
 
 /** One exploration path at a time; changing a parent removes its old detail descendants. */
@@ -35,11 +46,22 @@ export function buildGroupedFlowGraph(
   query = '',
   dimensions: ReadonlyMap<string, TraceNodeDimensions> = new Map(),
   detailPath: GroupedDetailSelection[] = [],
+  visibleDepthOverrides: ReadonlyMap<string, number> = new Map(),
+  defaultVisibleDepth = Number.POSITIVE_INFINITY,
 ): GroupedFlowGraph {
   const model = buildGroupedFlowModel(trace);
   const g = GROUPED_FLOW_GEOMETRY;
   const matchedIds = getSearchIds(buildJourney(trace), query);
-  const owners = new Map<string, JourneyNode[]>([['grouped-entry', model.preconditions], ...model.branches.map((node): [string, JourneyNode[]] => [node.span.spanId, node.children])]);
+  const validationNode = buildValidationNode(trace, model);
+  const controllerNode = model.request && model.entry?.span.type === 'controller' ? model.entry : null;
+  const controllerCardNode: JourneyNode | null = controllerNode
+    ? {
+        span: controllerNode.span,
+        children: controllerNode.children.map((child) => ({ span: child.span, children: [] })),
+      }
+    : null;
+  const entryDetails = [...model.preconditions, ...(validationNode ? [validationNode] : [])];
+  const owners = new Map<string, JourneyNode[]>([['grouped-entry', entryDetails], ...model.branches.map((node): [string, JourneyNode[]] => [node.span.spanId, node.children])]);
   const details: Array<GroupedDetailSelection & { node: JourneyNode }> = [];
   for (const item of detailPath) {
     const node = findNestedNode(owners.get(item.ownerId) ?? [], item.spanId);
@@ -52,32 +74,43 @@ export function buildGroupedFlowGraph(
   const processX = g.entryWidth + g.columnGap + (entryDetail ? details.length * columnWidth : 0);
   const detailX = entryDetail ? g.entryWidth + g.columnGap : processX + columnWidth;
   const outputX = processX + columnWidth + (entryDetail ? 0 : details.length * columnWidth);
+  const entryLaneWidth = g.entryWidth + g.columnGap / 2 + 24 + (entryDetail ? details.length * columnWidth : 0);
   const heightOf = (id: string, fallback: number) => dimensions.get(id)?.height ?? fallback;
   const branchHeights = model.branches.map((node) => heightOf(node.span.spanId, g.processHeight));
   const stackHeight = branchHeights.reduce((total, height) => total + height, 0) + Math.max(0, branchHeights.length - 1) * g.rowGap;
   const entryHeight = heightOf('grouped-entry', g.entryHeight);
+  const controllerHeight = controllerCardNode ? heightOf('grouped-controller', g.controllerHeight) : 0;
+  const entryStackHeight = entryHeight + (controllerCardNode ? g.entryStackGap + controllerHeight : 0);
   const outputHeight = heightOf('grouped-output', g.outputHeight);
-  const contentHeight = Math.max(stackHeight, entryHeight, outputHeight, ...details.map((item) => heightOf(`detail-${item.spanId}`, g.processHeight)), g.minimumHeight - g.top * 2);
+  const contentHeight = Math.max(stackHeight, entryStackHeight, outputHeight, ...details.map((item) => heightOf(`detail-${item.spanId}`, g.processHeight)), g.minimumHeight - g.top * 2);
   const centerY = g.top + contentHeight / 2;
+  const entryY = centerY - entryStackHeight / 2;
   const height = g.top + contentHeight + (details.length ? 80 : 36);
-  const data = (kind: GroupedCardData['kind'], node: JourneyNode | null, cardId: string, stepLabel = '', detail = false): GroupedCardData => ({
-    cardId,
-    detail,
-    openedSpanId: details.find((item) => item.ownerId === cardId)?.spanId,
-    kind,
-    request: model.request,
-    node,
-    preconditions: model.preconditions,
-    expanded: !collapsed.has(cardId) || Boolean(query),
-    query,
-    highlighted: !query || (node ? matchedIds.has(node.span.spanId) : false),
-    matchedIds,
-    totalDuration: trace.durationMs,
-    traceStatus: trace.status,
-    isComplete: trace.isComplete && model.entry !== null,
-    stepLabel,
-    unobserved: model.unobserved,
-  });
+  const data = (kind: GroupedCardData['kind'], node: JourneyNode | null, cardId: string, stepLabel = '', detail = false): GroupedCardData => {
+    const visibleDepth = query ? Number.POSITIVE_INFINITY : (visibleDepthOverrides.get(cardId) ?? (collapsed.has(cardId) ? 1 : defaultVisibleDepth));
+    return {
+      cardId,
+      detail,
+      openedSpanId: details.find((item) => item.ownerId === cardId)?.spanId,
+      kind,
+      request: model.request,
+      validation: validationNode,
+      node,
+      preconditions: model.preconditions,
+      expanded: visibleDepth > 1,
+      visibleDepth,
+      query,
+      highlighted: !query || (node ? matchedIds.has(node.span.spanId) : false),
+      matchedIds,
+      totalDuration: trace.durationMs,
+      traceStatus: trace.status,
+      isComplete: trace.isComplete && model.entry !== null,
+      stepLabel,
+      unobserved: model.unobserved,
+      showLeftHandle: false,
+      showRightHandle: false,
+    };
+  };
   const lane = (id: string, x: number, width: number, number: string, title: string, description: string, divided: boolean): GroupedFlowNode => ({
     id,
     type: 'groupedLane',
@@ -92,10 +125,10 @@ export function buildGroupedFlowGraph(
   });
   const outputNode = buildOutputNode(trace, model.entry?.span);
   const nodes: GroupedFlowNode[] = [
-    lane('lane-entry', -24, g.entryWidth + g.columnGap / 2 + 24, '01', 'Entrada', 'Petición y controller', true),
+    lane('lane-entry', -24, entryLaneWidth, '01', 'Entrada', 'Petición y controller', true),
     lane('lane-process', processX - g.columnGap / 2, outputX - processX, '02', 'Proceso', 'Pasos anidados · orden de ejecución ↓', true),
     lane('lane-output', outputX - g.columnGap / 2, g.outputWidth + g.columnGap / 2 + 24, '03', 'Salida', 'Resultado de la ejecución', false),
-    { id: 'grouped-entry', type: 'groupedCard', position: { x: 0, y: centerY - entryHeight / 2 }, data: data('entry', model.entry, 'grouped-entry'), style: { width: g.entryWidth }, zIndex: 2 },
+    { id: 'grouped-entry', type: 'groupedCard', position: { x: 0, y: entryY }, data: data('entry', model.entry, 'grouped-entry'), style: { width: g.entryWidth }, zIndex: 2 },
     {
       id: 'grouped-output',
       type: 'groupedCard',
@@ -105,6 +138,16 @@ export function buildGroupedFlowGraph(
       zIndex: 2,
     },
   ];
+  if (controllerCardNode) {
+    nodes.push({
+      id: 'grouped-controller',
+      type: 'groupedCard',
+      position: { x: 0, y: entryY + entryHeight + g.entryStackGap },
+      data: data('controller', controllerCardNode, 'grouped-controller'),
+      style: { width: g.entryWidth },
+      zIndex: 2,
+    });
+  }
   let y = centerY - stackHeight / 2;
   model.groups.forEach((group, groupIndex) =>
     group.forEach((node, branchIndex) => {
@@ -126,11 +169,11 @@ export function buildGroupedFlowGraph(
       zIndex: 2,
     });
   });
-  const edges = buildGroupedEdges(model, trace);
+  const edges = buildGroupedEdges(model, trace, Boolean(controllerCardNode));
   // Inspection is not another execution stage. Route execution around the opened cards.
   if (details.length)
     edges.forEach((edge) => {
-      if ((entryDetail && edge.source === 'grouped-entry') || (!entryDetail && edge.target === 'grouped-output')) {
+      if ((entryDetail && edge.source === (controllerCardNode ? 'grouped-controller' : 'grouped-entry')) || (!entryDetail && edge.target === 'grouped-output')) {
         edge.type = 'groupedReturn';
         edge.sourceHandle = 'bottom';
         edge.targetHandle = 'bottom-target';
@@ -154,6 +197,13 @@ export function buildGroupedFlowGraph(
       zIndex: 1,
     }),
   );
+  const visibleLeftTargets = new Set(edges.filter((edge) => edge.targetHandle === 'left').map((edge) => edge.target));
+  const visibleRightSources = new Set(edges.filter((edge) => edge.sourceHandle === 'right').map((edge) => edge.source));
+  nodes.forEach((node) => {
+    if (node.type !== 'groupedCard') return;
+    node.data.showLeftHandle = visibleLeftTargets.has(node.id);
+    node.data.showRightHandle = visibleRightSources.has(node.id);
+  });
   const highlighted = new Set(nodes.filter((node) => node.type === 'groupedCard' && node.data.highlighted).map((node) => node.id));
   return {
     nodes,
@@ -180,10 +230,11 @@ function findNestedNode(nodes: JourneyNode[], id: string): JourneyNode | undefin
   return undefined;
 }
 
-function buildGroupedEdges(model: GroupedFlowModel, trace: TraceFlowTraceDto): Edge[] {
+function buildGroupedEdges(model: GroupedFlowModel, trace: TraceFlowTraceDto, hasStackedController: boolean): Edge[] {
   if (!model.linked) return [];
   const edges: Edge[] = [];
-  let previous = ['grouped-entry'];
+  if (hasStackedController) edges.push(groupedEdge('grouped-entry', 'grouped-controller', model.entry?.span.status === 'error', true, false, null));
+  let previous = [hasStackedController ? 'grouped-controller' : 'grouped-entry'];
   model.groups.forEach((group, groupIndex) => {
     group.forEach((node) => previous.forEach((source) => edges.push(groupedEdge(source, node.span.spanId, node.span.status === 'error', groupIndex > 0))));
     previous = group.map((node) => node.span.spanId);
@@ -194,7 +245,7 @@ function buildGroupedEdges(model: GroupedFlowModel, trace: TraceFlowTraceDto): E
   return edges;
 }
 
-function groupedEdge(source: string, target: string, error: boolean, sequential: boolean, incomplete = false): Edge {
+function groupedEdge(source: string, target: string, error: boolean, sequential: boolean, incomplete = false, label: string | null = sequential ? 'Luego' : null): Edge {
   const color = error ? '#e4667d' : '#a6a9bc';
   return {
     id: `grouped-${source}-${target}`,
@@ -203,7 +254,7 @@ function groupedEdge(source: string, target: string, error: boolean, sequential:
     sourceHandle: sequential ? 'bottom' : 'right',
     targetHandle: sequential ? 'top' : 'left',
     type: sequential ? 'smoothstep' : 'default',
-    ...(sequential ? { label: 'Luego', labelStyle: { fontSize: 10, fill: 'var(--flow-edge-label-text)' }, labelBgStyle: { fill: 'var(--flow-edge-label-bg)' } } : {}),
+    ...(label ? { label, labelStyle: { fontSize: 10, fill: 'var(--flow-edge-label-text)' }, labelBgStyle: { fill: 'var(--flow-edge-label-bg)' } } : {}),
     style: { stroke: color, strokeWidth: 2, ...(incomplete ? { strokeDasharray: '5 5' } : {}) },
     markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color },
     zIndex: 1,
@@ -254,15 +305,72 @@ export function buildOutputNode(trace: TraceFlowTraceDto, controllerSpan?: Trace
   };
 }
 
+export function buildValidationSpan(trace: TraceFlowTraceDto, controllerSpan?: TraceFlowSpanDto | null, requestSpan?: TraceFlowSpanDto | null): TraceFlowSpanDto | null {
+  const active = controllerSpan ?? requestSpan;
+  const contract = getValidationContract(active);
+  const hasValidationError = (requestSpan?.attributes?.['http.response.status_code'] === 400 || requestSpan?.status === 'error') && !controllerSpan;
+  if (!contract && !hasValidationError) return null;
+
+  const dtoName = contract?.dtoName ?? 'DTO';
+  const spanId = `validation-${dtoName}`;
+  const validationErrorMessage = hasValidationError ? (requestSpan?.error?.message ?? 'Fallo de validación en parámetros de entrada') : null;
+  const requestInput = requestSpan ? getTraceDataSections(requestSpan).input : undefined;
+  const capturedInput = requestInput ?? (active ? getTraceDataSections(active).input : undefined);
+  const validationInput = getValidationInput(capturedInput, contract);
+
+  return {
+    protocolVersion: 1,
+    traceId: trace.traceId,
+    spanId,
+    parentSpanId: requestSpan?.spanId ?? null,
+    serviceName: trace.serviceName,
+    name: 'Validación',
+    type: 'validation',
+    labels: ['validation', 'dto', ...(contract?.location ? [contract.location] : [])],
+    className: contract?.dtoName ?? 'Validation',
+    methodName: null,
+    description: contract ? `${contract.parameters.length} campos validados` : (validationErrorMessage ?? 'Validación de parámetros'),
+    startedAt: requestSpan?.startedAt ?? trace.startedAt,
+    endedAt: requestSpan?.startedAt ?? trace.startedAt,
+    durationMs: 0.1,
+    status: hasValidationError ? 'error' : 'success',
+    attributes: {
+      'traceflow.node_type': 'validation',
+      ...(contract?.dtoName ? { 'traceflow.controller.dto': contract.dtoName } : {}),
+      ...(contract ? { 'traceflow.validation.schema': JSON.stringify(contract) } : {}),
+      ...(contract?.location ? { 'traceflow.validation.location': contract.location } : {}),
+      ...(hasValidationError && validationErrorMessage ? { 'traceflow.error.message': validationErrorMessage } : {}),
+    },
+    ...(validationInput !== undefined ? { input: validationInput } : {}),
+    output: hasValidationError ? { valid: false, error: validationErrorMessage } : { valid: true },
+    error: hasValidationError ? { name: 'ValidationError', message: validationErrorMessage! } : null,
+  };
+}
+
+export function buildValidationNode(trace: TraceFlowTraceDto, model: GroupedFlowModel): JourneyNode | null {
+  const controllerSpan = model.entry?.span.type === 'controller' ? model.entry.span : trace.spans.find((s) => s.type === 'controller');
+  const requestSpan = model.request?.span ?? trace.spans.find((s) => s.attributes?.['traceflow.http.request_root'] === true);
+  const span = buildValidationSpan(trace, controllerSpan, requestSpan);
+  return span ? { span, children: [] } : null;
+}
+
 export function findSpanForCardId(cardId: string, trace: TraceFlowTraceDto): TraceFlowSpanDto | null {
   if (cardId === 'grouped-entry') {
-    const controller = trace.spans.find((s) => s.type === 'controller');
     const root = trace.spans.find((s) => s.attributes?.['traceflow.http.request_root'] === true);
-    return controller ?? root ?? trace.spans[0] ?? null;
+    const controller = trace.spans.find((s) => s.type === 'controller');
+    return root ?? controller ?? trace.spans[0] ?? null;
+  }
+  if (cardId === 'grouped-controller') {
+    return trace.spans.find((s) => s.type === 'controller') ?? null;
   }
   if (cardId === 'grouped-output') {
     const controller = trace.spans.find((s) => s.type === 'controller');
     return buildOutputSpan(trace, controller);
+  }
+  if (cardId.startsWith('detail-validation') || cardId.startsWith('validation-')) {
+    const model = buildGroupedFlowModel(trace);
+    const node = buildValidationNode(trace, model);
+    if (node) return node.span;
   }
   const spanId = cardId.startsWith('detail-') ? cardId.replace('detail-', '') : cardId;
   return trace.spans.find((s) => s.spanId === spanId) ?? null;

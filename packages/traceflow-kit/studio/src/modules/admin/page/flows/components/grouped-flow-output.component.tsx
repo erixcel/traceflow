@@ -7,7 +7,7 @@ import { getTraceDataSections } from '../functions/trace-data.function';
 import type { GroupedCardProps } from '../interfaces/grouped-flow.interface';
 
 export function GroupedFlowOutputComponent({ data }: GroupedCardProps): React.JSX.Element {
-  const { selectSpan, fit } = useContext(GroupedFlowContext);
+  const { selectCard } = useContext(GroupedFlowContext);
   const span = data.node?.span;
   const output = span ? getTraceDataSections(span).output : undefined;
   const fields = output && typeof output === 'object' && !Array.isArray(output) ? Object.entries(output) : [];
@@ -17,8 +17,7 @@ export function GroupedFlowOutputComponent({ data }: GroupedCardProps): React.JS
       onClick={(e) => {
         if ((e.target as HTMLElement).closest('button, details')) return;
         if (span) {
-          selectSpan(span, 'output');
-          fit({ cardIds: ['grouped-output'] });
+          selectCard(data.cardId, span, 'output');
         }
       }}
     >
@@ -49,8 +48,7 @@ export function GroupedFlowOutputComponent({ data }: GroupedCardProps): React.JS
           <button
             className={GROUPED_FLOW_LINK_CLASS}
             onClick={() => {
-              selectSpan(span, 'output');
-              fit({ cardIds: ['grouped-output'] });
+              selectCard(data.cardId, span, 'output');
             }}
           >
             Ver salida ↗

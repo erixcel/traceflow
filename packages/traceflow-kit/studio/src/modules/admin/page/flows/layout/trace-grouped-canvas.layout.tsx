@@ -1,6 +1,7 @@
 import { Background, BackgroundVariant, Controls, ReactFlow } from '@xyflow/react';
 import { useMemo, useState } from 'react';
 import { HttpInputSettingsComponent } from '../components/http-input-settings.component';
+import { GroupedFlowDepthComponent } from '../components/grouped-flow-depth.component';
 import { JsonViewerComponent } from '../components/json-viewer.component';
 import { GROUPED_FLOW_CONTROL_CLASS } from '../constants/grouped-flow.constant';
 import { GROUPED_FLOW_EDGE_TYPES, GROUPED_FLOW_NODE_TYPES } from '../constants/grouped-node-types.constant';
@@ -10,11 +11,13 @@ import { useGroupedFlow } from '../hooks/use-grouped-flow.hook';
 import type { TraceCanvasProps } from '../interfaces/trace-canvas.interface';
 
 export function TraceGroupedCanvasLayout({ trace, onSelectSpan }: TraceCanvasProps): React.JSX.Element {
-  const flow = useGroupedFlow(trace);
+  const flow = useGroupedFlow(trace, onSelectSpan);
   const [view, setView] = useState<'flow' | 'json'>('flow');
   const groupedJson = useMemo(() => buildGroupedFlowJson(trace), [trace]);
   return (
-    <GroupedFlowContext.Provider value={{ selectSpan: onSelectSpan, toggleGroup: flow.toggleGroup, openStep: flow.openStep, closeDetail: flow.closeDetail, fit: flow.fit }}>
+    <GroupedFlowContext.Provider
+      value={{ selectSpan: onSelectSpan, selectCard: flow.selectCard, toggleGroup: flow.toggleGroup, openStep: flow.openStep, closeDetail: flow.closeDetail, fit: flow.fit }}
+    >
       <div className="relative min-h-0 flex-1">
         <div className="pointer-events-none absolute inset-x-5 top-3 z-20 flex items-start justify-between gap-4">
           <div className="pointer-events-auto flex min-w-0 items-center gap-3">
@@ -35,8 +38,15 @@ export function TraceGroupedCanvasLayout({ trace, onSelectSpan }: TraceCanvasPro
             </label>
           </div>
           <div className="pointer-events-auto flex shrink-0 items-center gap-2">
-            <button className={GROUPED_FLOW_CONTROL_CLASS} type="button" aria-pressed={view === 'json'} onClick={() => setView((current) => (current === 'flow' ? 'json' : 'flow'))}>
-              {view === 'json' ? 'Vista flujo' : 'Vista JSON'}
+            <button
+              className={`${GROUPED_FLOW_CONTROL_CLASS} w-8 justify-center !px-0 font-mono text-[11px] font-semibold ${view === 'json' ? 'border-pink-300 bg-pink-50 text-pink-700 dark:border-pink-800 dark:bg-pink-500/10 dark:text-pink-300' : ''}`}
+              type="button"
+              aria-label={view === 'json' ? 'Volver a la vista del flujo' : 'Mostrar vista JSON'}
+              title={view === 'json' ? 'Volver a la vista del flujo' : 'Vista JSON'}
+              aria-pressed={view === 'json'}
+              onClick={() => setView((current) => (current === 'flow' ? 'json' : 'flow'))}
+            >
+              {'{}'}
             </button>
             <HttpInputSettingsComponent />
           </div>
@@ -51,21 +61,26 @@ export function TraceGroupedCanvasLayout({ trace, onSelectSpan }: TraceCanvasPro
             aria-label="Diagrama de entrada, proceso y salida"
           >
             <div className="pointer-events-none absolute right-5 bottom-4 z-20 flex items-center gap-2">
-              {flow.hasDetails ? (
-                <button className={`${GROUPED_FLOW_CONTROL_CLASS} pointer-events-auto`} onClick={flow.closeDetails}>
-                  Cerrar detalles
-                </button>
-              ) : null}
-              <button className={`${GROUPED_FLOW_CONTROL_CLASS} pointer-events-auto disabled:opacity-40`} disabled={!flow.canExpand || Boolean(flow.query.trim())} onClick={flow.toggleAll}>
-                {flow.allExpanded ? 'Contraer grupos' : 'Expandir grupos'}
+              <button
+                className={`${GROUPED_FLOW_CONTROL_CLASS} pointer-events-auto w-9 justify-center !px-0`}
+                type="button"
+                aria-label="Ajustar vista"
+                title="Ajustar vista"
+                onClick={() => flow.fit({ forceFull: true })}
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4 shrink-0 fill-none stroke-current" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1.5 12s3.8-6 10.5-6 10.5 6 10.5 6-3.8 6-10.5 6S1.5 12 1.5 12Z" />
+                  <circle cx="12" cy="12" r="3.4" />
+                </svg>
               </button>
-              <button className={`${GROUPED_FLOW_CONTROL_CLASS} pointer-events-auto`} onClick={() => flow.fit({ forceFull: true })}>
-                Ajustar vista
-              </button>
+              <GroupedFlowDepthComponent value={flow.visibleDepth} max={flow.maxVisibleDepth} onChange={flow.setVisibleDepth} />
             </div>
             <ReactFlow
               nodes={flow.nodes}
               edges={flow.edges}
+              onInit={() => {
+                window.requestAnimationFrame(() => flow.fit({ forceFull: true, duration: 0 }));
+              }}
               nodeTypes={GROUPED_FLOW_NODE_TYPES}
               edgeTypes={GROUPED_FLOW_EDGE_TYPES}
               onNodesChange={flow.onNodesChange}

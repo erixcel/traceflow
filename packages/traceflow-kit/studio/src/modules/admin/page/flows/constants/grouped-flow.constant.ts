@@ -7,6 +7,8 @@ export const GROUPED_FLOW_GEOMETRY = {
   top: 82,
   minimumHeight: 580,
   entryHeight: 308,
+  controllerHeight: 174,
+  entryStackGap: 20,
   processHeight: 174,
   outputHeight: 236,
 } as const;
