@@ -61,7 +61,7 @@ export function DetailsPanelLayout({ span, onClose, initialTab = 'input', onTabC
   return (
     <aside
       aria-label={`Detalles de ${panelTitle}`}
-      className={`absolute top-0 right-0 z-30 flex h-full w-[min(26rem,92vw)] flex-col border-l bg-white/98 shadow-[-20px_0_50px_rgba(39,43,55,0.13)] backdrop-blur-xl dark:bg-zinc-950/98 dark:shadow-[-28px_0_70px_rgba(0,0,0,0.5)] ${theme.borderClass}`}
+      className={`absolute top-0 right-0 z-30 flex h-full w-[min(26rem,92vw)] flex-col border-l bg-white/98 shadow-[-20px_0_50px_rgba(39,43,55,0.13)] backdrop-blur-xl dark:bg-zinc-950/98 dark:shadow-[-28px_0_70px_rgba(0,0,0,0.5)] max-md:top-auto max-md:right-0 max-md:bottom-0 max-md:left-0 max-md:h-[min(60dvh,34rem)] max-md:w-full max-md:overflow-hidden max-md:rounded-t-2xl max-md:!border-l-0 max-md:border-t max-md:border-zinc-200 max-md:shadow-[0_-18px_45px_rgba(39,43,55,0.16)] dark:max-md:border-zinc-800 dark:max-md:shadow-[0_-22px_52px_rgba(0,0,0,0.55)] ${theme.borderClass}`}
     >
       <header className={`flex items-start justify-between border-b px-5 py-4 ${theme.headerClass}`}>
         <div className="min-w-0">

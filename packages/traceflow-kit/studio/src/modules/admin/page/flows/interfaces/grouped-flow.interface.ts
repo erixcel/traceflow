@@ -62,6 +62,7 @@ export interface FitViewOptions {
   cardIds?: string[];
   duration?: number;
   forceFull?: boolean;
+  revealLaneHeader?: boolean;
 }
 
 export interface GroupedFlowActions {

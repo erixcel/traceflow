@@ -9,10 +9,18 @@ export function HttpInputSettingsComponent(): React.JSX.Element {
   const visibleCount = Object.values(preferences.visible).filter(Boolean).length;
   return (
     <details className="relative z-30">
-      <summary className="flex h-8 cursor-pointer list-none items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-0 text-[11px] font-semibold text-zinc-600 shadow-sm transition hover:border-zinc-300 hover:text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-zinc-600 dark:hover:text-white [&::-webkit-details-marker]:hidden">
-        <span aria-hidden="true">⚙</span>
-        Visualizar
-        <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[9px] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">{visibleCount}</span>
+      <summary
+        className="flex h-8 cursor-pointer list-none items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-0 text-[11px] font-semibold text-zinc-600 shadow-sm transition hover:border-zinc-300 hover:text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-zinc-600 dark:hover:text-white max-sm:w-8 max-sm:justify-center max-sm:px-0 [&::-webkit-details-marker]:hidden"
+        aria-label="Visualizar datos HTTP"
+      >
+        <svg aria-hidden="true" className="size-3.5 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+          <path d="M6 4h7M6 8h7M6 12h7" />
+          <circle cx="3" cy="4" r=".75" fill="currentColor" stroke="none" />
+          <circle cx="3" cy="8" r=".75" fill="currentColor" stroke="none" />
+          <circle cx="3" cy="12" r=".75" fill="currentColor" stroke="none" />
+        </svg>
+        <span className="max-sm:hidden">Visualizar</span>
+        <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[9px] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 max-sm:hidden">{visibleCount}</span>
       </summary>
       <div className="absolute top-[calc(100%+0.5rem)] right-0 w-64 rounded-xl border border-zinc-200 bg-white p-3 shadow-xl dark:border-zinc-700 dark:bg-zinc-900">
         <div className="flex items-center justify-between gap-3 border-b border-zinc-100 pb-2 dark:border-zinc-800">

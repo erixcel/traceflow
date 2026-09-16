@@ -13,6 +13,14 @@ export interface HeaderContent {
   summary: HeaderSummary | null;
 }
 
+export interface HeaderMobileAction {
+  label: string;
+  count?: number;
+  onClick: () => void;
+}
+
 export interface HeaderStore extends HeaderContent {
+  mobileAction: HeaderMobileAction | null;
   setHeader: (content: HeaderContent) => void;
+  setMobileAction: (action: HeaderMobileAction | null) => void;
 }

@@ -3,7 +3,12 @@ import { TraceHistoryCardComponent } from '../components/trace-history-card.comp
 import { connectionDotClass } from '../functions/style.function';
 import { useTraceStore } from '../stores/trace.store';
 
-export function TraceHistoryLayout(): React.JSX.Element {
+interface TraceHistoryLayoutProps {
+  className?: string;
+  onTraceChosen?: () => void;
+}
+
+export function TraceHistoryLayout({ className = '', onTraceChosen }: TraceHistoryLayoutProps = {}): React.JSX.Element {
   const traces = useTraceStore((state) => state.traces);
   const activeTraceId = useTraceStore((state) => state.activeTraceId);
   const connectionStatus = useTraceStore((state) => state.connectionStatus);
@@ -25,7 +30,7 @@ export function TraceHistoryLayout(): React.JSX.Element {
   }, [query, statusFilter, traces]);
 
   return (
-    <aside className="flex h-full min-h-0 min-w-0 flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+    <aside className={`flex h-full min-h-0 min-w-0 flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950 ${className}`}>
       <div className="flex items-center gap-2 px-4 pt-4 text-xs text-zinc-600 dark:text-zinc-300">
         <span className={`size-2 rounded-full ${connectionDotClass(connectionStatus)}`} />
         {connectionStatus === 'connected' ? 'Conectado' : connectionStatus === 'reconnecting' ? 'Reconectando' : 'Desconectado'}
@@ -94,7 +99,19 @@ export function TraceHistoryLayout(): React.JSX.Element {
         {loading && traces.length === 0 ? <p className="px-3 py-5 text-center text-xs text-zinc-500">Cargando trazas…</p> : null}
         {!loading && filtered.length === 0 ? <p className="px-3 py-5 text-center text-xs text-zinc-500">No hay resultados.</p> : null}
         {filtered.map((trace) => (
-          <TraceHistoryCardComponent key={trace.traceId} trace={trace} active={activeTraceId === trace.traceId} onSelect={selectTrace} onShowDetails={showTraceDetails} />
+          <TraceHistoryCardComponent
+            key={trace.traceId}
+            trace={trace}
+            active={activeTraceId === trace.traceId}
+            onSelect={async (traceId) => {
+              onTraceChosen?.();
+              await selectTrace(traceId);
+            }}
+            onShowDetails={async (traceId) => {
+              onTraceChosen?.();
+              await showTraceDetails(traceId);
+            }}
+          />
         ))}
       </div>
     </aside>

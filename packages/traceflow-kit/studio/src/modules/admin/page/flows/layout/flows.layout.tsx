@@ -6,8 +6,12 @@ import { ReactFlowProvider } from '@xyflow/react';
 import type { TraceCanvasProps } from '../interfaces/trace-canvas.interface';
 import { TraceGroupedCanvasLayout } from './trace-grouped-canvas.layout';
 import { hasMonotonicTiming } from '../functions/execution-flow.function';
+import { useCallback, useEffect, useState } from 'react';
+import { useHeaderStore } from '../../../stores/header.store';
 
 export function FlowsLayout(): React.JSX.Element {
+  const [mobileHistoryOpen, setMobileHistoryOpen] = useState(false);
+  const traces = useTraceStore((state) => state.traces);
   const activeTrace = useTraceStore((state) => state.activeTrace);
   const selectedSpan = useTraceStore((state) => state.selectedSpan);
   const activeTab = useTraceStore((state) => state.activeTab);
@@ -17,6 +21,17 @@ export function FlowsLayout(): React.JSX.Element {
   const setSelectedSpan = useTraceStore((state) => state.setSelectedSpan);
   const setActiveTab = useTraceStore((state) => state.setActiveTab);
   const setError = useTraceStore((state) => state.setError);
+  const setMobileAction = useHeaderStore((state) => state.setMobileAction);
+  const openMobileHistory = useCallback(() => {
+    setSelectedSpan(null);
+    setMobileHistoryOpen(true);
+  }, [setSelectedSpan]);
+
+  useEffect(() => {
+    setMobileAction({ label: 'Trazas', count: traces.length, onClick: openMobileHistory });
+    return () => setMobileAction(null);
+  }, [openMobileHistory, setMobileAction, traces.length]);
+
   const selectSpan: TraceCanvasProps['onSelectSpan'] = (span, tab) => {
     if (tab) {
       setActiveTab(tab);
@@ -44,7 +59,7 @@ export function FlowsLayout(): React.JSX.Element {
       <section className="relative min-h-0 min-w-0 overflow-hidden bg-zinc-50 dark:bg-[#0d0e12]">
         {error ? (
           <div
-            className="absolute top-14 right-6 z-40 flex w-[min(22rem,calc(100%-3rem))] items-start gap-2.5 rounded-xl border border-zinc-200 bg-white/95 p-3 text-zinc-700 shadow-[0_12px_30px_rgba(24,24,27,0.14)] backdrop-blur-xl dark:border-zinc-700 dark:bg-zinc-900/95 dark:text-zinc-200 dark:shadow-[0_16px_36px_rgba(0,0,0,0.45)] max-md:right-4"
+            className="absolute right-6 bottom-16 z-40 flex w-[min(22rem,calc(100%-3rem))] items-start gap-2.5 rounded-xl border border-zinc-200 bg-white/95 p-3 text-zinc-700 shadow-[0_12px_30px_rgba(24,24,27,0.14)] backdrop-blur-xl dark:border-zinc-700 dark:bg-zinc-900/95 dark:text-zinc-200 dark:shadow-[0_16px_36px_rgba(0,0,0,0.45)] max-md:right-4"
             role="alert"
           >
             <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-300" aria-hidden="true">
@@ -110,6 +125,30 @@ export function FlowsLayout(): React.JSX.Element {
             setSelectedSpan(null);
           }}
         />
+      ) : null}
+      {mobileHistoryOpen ? (
+        <div className="absolute inset-0 z-50 hidden max-md:block" role="dialog" aria-modal="true" aria-label="Historial de trazas">
+          <button className="absolute inset-0 cursor-default bg-zinc-950/30 backdrop-blur-[1px]" type="button" aria-label="Cerrar historial de trazas" onClick={() => setMobileHistoryOpen(false)} />
+          <div className="absolute inset-x-0 bottom-0 flex h-[min(76dvh,42rem)] flex-col overflow-hidden rounded-t-2xl border-t border-zinc-200 bg-white shadow-[0_-18px_48px_rgba(39,43,55,0.2)] dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-[0_-22px_56px_rgba(0,0,0,0.6)]">
+            <header className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-200 px-4 dark:border-zinc-800">
+              <div className="flex items-center gap-2">
+                <strong className="text-xs">Historial de trazas</strong>
+                <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 font-mono text-[9px] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">{traces.length}</span>
+              </div>
+              <button
+                className="grid size-8 cursor-pointer place-items-center rounded-lg border border-zinc-200 text-lg text-zinc-500 dark:border-zinc-700 dark:text-zinc-300"
+                type="button"
+                aria-label="Cerrar historial de trazas"
+                onClick={() => setMobileHistoryOpen(false)}
+              >
+                ×
+              </button>
+            </header>
+            <div className="min-h-0 flex-1">
+              <TraceHistoryLayout className="border-r-0" onTraceChosen={() => setMobileHistoryOpen(false)} />
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );
