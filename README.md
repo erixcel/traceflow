@@ -1,60 +1,69 @@
+<div align="center">
+
 # TraceFlow
 
-TraceFlow es un runtime ligero de trazabilidad para aplicaciones Node.js. Usa
-OpenTelemetry para crear spans, propagar contexto y enviarlos a un Studio local
-durante el desarrollo.
+**Trazabilidad ligera para aplicaciones Node.js, impulsada por OpenTelemetry.**
 
-El repositorio se organiza como un workspace de npm, pero los consumidores solo
-necesitan instalar el paquete que corresponda.
+Instrumenta operaciones, captura entradas y salidas y explora trazas en un Studio local, sin acoplar tu aplicación a un framework.
 
-```text
-traceflow       Runtime de producción: OpenTelemetry, tipos e instrumentación
-traceflow-kit   CLI, API local, Swagger y servidor del Studio
-traceflow-kit/studio/  Frontend React/Vite compilado dentro de traceflow-kit
-```
+`Node.js 20.19+ / 22.12+` · `npm 11+` · `OpenTelemetry` · `TypeScript`
 
-Dentro de `packages/traceflow/src/modules`, el runtime se organiza por
-features:
+[Inicio rápido](#-inicio-rápido) · [Instrumentación](#-instrumentación) · [Studio](#-traceflow-studio) · [Desarrollo local](#-desarrollo-del-repositorio)
 
-```text
-settings/  configuración e inicialización de OpenTelemetry
-traces/    trazas anotadas y piezas compartidas
-```
+</div>
 
-`traces/normal` contiene `@Trace()` y `traces/shared` contiene únicamente
-contratos y funciones utilizadas por el decorador. Las interfaces, tipos y
-funciones siguen sufijos descriptivos como
-`.interface.ts`, `.type.ts` y `.function.ts`. Los archivos `.function.ts` no
-guardan estado ni constantes globales; esos valores viven en `.constant.ts` o
-`.runtime.ts`.
+---
 
-El núcleo de `traceflow` no depende de NestJS, Fastify ni Express. El kit sí usa
-NestJS sobre Fastify para mantener sus controladores y su API local ordenados,
-sin añadir esas dependencias a las aplicaciones que solo instrumentan su código.
+## ✨ ¿Qué ofrece?
 
-## Requisitos
+| Funcionalidad | Descripción |
+| :-- | :-- |
+| **Trazas con OpenTelemetry** | Crea spans y propaga el contexto entre operaciones. |
+| **Decoradores sencillos** | Instrumenta métodos con `@Trace()` y clases de acceso a datos con `@Table()`. |
+| **Entrada y salida** | Captura argumentos, respuestas y excepciones de las operaciones. |
+| **Studio local** | Inspecciona trazas mediante una interfaz web y una API documentada con Swagger. |
+| **Runtime independiente** | No requiere NestJS, Express ni Fastify en la aplicación consumidora. |
+| **HTTP opcional** | Permite instrumentación HTTP automática o trazas creadas solo con decoradores. |
 
-- Node.js 20.19+ o 22.12+.
-- npm 11+.
+> [!NOTE]
+> TraceFlow Studio está diseñado para **desarrollo local**. Mantiene las trazas en memoria y no debe exponerse públicamente sin autenticación, TLS y controles de acceso.
 
-## Uso desde una aplicación Node.js
+## 📦 Paquetes
 
-Instala solamente el runtime:
+| Paquete | Responsabilidad | Instalación |
+| :-- | :-- | :-- |
+| **`traceflow`** | Runtime de producción, OpenTelemetry, decoradores, tipos y protocolo. | `npm install traceflow` |
+| **`traceflow-kit`** | CLI, API local, Swagger y servidor del Studio. | `npm install -D traceflow-kit` |
+| **`traceflow-kit/studio/`** | Frontend React/Vite integrado en el kit. | No se instala por separado. |
+
+El repositorio es un **npm workspace**, pero cada consumidor instala únicamente los paquetes que necesita.
+
+## 🚀 Inicio rápido
+
+### 1. Instala el runtime
 
 ```bash
 npm install traceflow
 ```
 
-Inicializa TraceFlow antes de importar el resto de la aplicación:
+### 2. Inicializa TraceFlow
+
+Hazlo **antes de importar el resto de la aplicación**.
 
 ```ts
 // src/instrumentation.ts
-import { startTraceFlow, Trace } from 'traceflow';
+import { startTraceFlow } from 'traceflow';
 
 startTraceFlow({
   serviceName: 'mi-api',
   studioUrl: 'http://127.0.0.1:4789',
 });
+```
+
+### 3. Instrumenta una operación
+
+```ts
+import { Trace } from 'traceflow';
 
 export class CustomerService {
   @Trace({
@@ -68,38 +77,69 @@ export class CustomerService {
 }
 ```
 
-Marca operaciones de negocio con el decorador genérico `@Trace()`. Sus argumentos
-y su respuesta se capturan por defecto:
+`@Trace()` captura **argumentos y respuesta** por defecto. El Studio los presenta por separado, junto con los atributos documentales.
+
+### 4. Abre el Studio
+
+```bash
+npm install -D traceflow-kit
+```
+
+Añade este script a tu `package.json`:
+
+```json
+{
+  "scripts": {
+    "traceflow:studio": "traceflow-kit studio"
+  }
+}
+```
+
+```bash
+npm run traceflow:studio
+```
+
+| Recurso | URL local |
+| :-- | :-- |
+| **Studio** | http://127.0.0.1:4789 |
+| Swagger | http://127.0.0.1:4789/docs |
+| OpenAPI JSON | http://127.0.0.1:4789/docs-json |
+| Ingesta de spans | http://127.0.0.1:4789/api/v1/spans/batch |
+
+## 🧩 Instrumentación
+
+### `@Trace()` — operaciones de negocio
 
 ```ts
 import { Trace } from 'traceflow';
 
 export class CustomerService {
-  @Trace({
-    name: 'Listar clientes',
-    type: 'service',
-  })
+  @Trace({ name: 'Listar clientes', type: 'service' })
   async findAll(filters: { page: number; limit: number }) {
     return [];
   }
 }
 ```
 
-Studio muestra la entrada, la salida y los atributos documentales en secciones
-separadas. TraceFlow intenta conservar los nombres de los parámetros del método;
-si el JavaScript compilado no los conserva, utiliza `arg1`, `arg2`, etc. Para
-desactivar una captura concreta usa `capture: { input: false }` o
-`capture: { output: false }`.
+| Comportamiento | Detalle |
+| :-- | :-- |
+| **Entrada** | Captura argumentos de manera predeterminada. |
+| **Salida** | Captura el valor devuelto de manera predeterminada. |
+| **Parámetros** | Conserva sus nombres si el JavaScript compilado lo permite; en caso contrario usa `arg1`, `arg2`, etc. |
+| **Excepciones** | Las registra como parte de la operación instrumentada. |
+| **Métodos estáticos** | Son compatibles con `@Trace()`. |
+| **Compatibilidad** | `@TraceNode()` sigue disponible como alias. |
 
-`@TraceNode()` se conserva como alias para aplicaciones existentes:
+Desactiva una captura específica con `capture`:
 
 ```ts
-import { TraceNode } from 'traceflow';
+@Trace({ name: 'Consultar clientes', type: 'service', capture: { input: false } })
 ```
 
-TypeScript solo permite decoradores en clases y sus miembros, no directamente en
-funciones sueltas. Para instrumentar utilidades, agrúpalas en una clase de métodos
-estáticos:
+Para desactivar la salida, utiliza `capture: { output: false }`.
+
+> [!TIP]
+> TypeScript no admite decoradores directamente sobre funciones independientes. Si necesitas instrumentar una utilidad, conviértela en un método estático.
 
 ```ts
 import { Trace } from 'traceflow';
@@ -108,17 +148,21 @@ export class PaginationFunction {
   @Trace({ name: 'Crear paginación', type: 'method' })
   static createPaginationMeta(total: number, page: number, limit: number) {
     const totalPages = Math.ceil(total / limit);
-    return { total, page, limit, totalPages, hasNextPage: page < totalPages, hasPreviousPage: page > 1 };
+    return {
+      total,
+      page,
+      limit,
+      totalPages,
+      hasNextPage: page < totalPages,
+      hasPreviousPage: page > 1,
+    };
   }
 }
 ```
 
-`@Trace()` soporta métodos estáticos y conserva los argumentos, el resultado, las
-excepciones y la captura de entrada y salida.
+### `@Table()` — acceso a datos
 
-Para una clase de acceso a datos basta un decorador. Cada método invocado produce
-un span `table` con el nombre de la tabla, el método ejecutado y la operación
-inferida:
+Un decorador en la clase instrumenta sus métodos invocados y genera spans de tipo `table`.
 
 ```ts
 import { Table } from 'traceflow';
@@ -131,13 +175,19 @@ export class UserStore {
 }
 ```
 
-`exclude` permite omitir métodos auxiliares. Si un método requiere un nombre o
-tipo distinto, puede conservar su propio `@Trace()` sin crear un span duplicado.
-Usa `table` para consultas y `method` para métodos internos relevantes que no
-representan un controller, un service o una transformación.
+Cada span incluye la **tabla**, el **método** y la **operación inferida**.
 
-También puedes desactivar la instrumentación automática de HTTP si solo quieres
-usar spans creados por tus decoradores:
+- Usa `exclude` para omitir métodos auxiliares.
+- Si un método ya tiene su propio `@Trace()`, no se genera un span duplicado.
+- Reserva `table` para consultas; usa `method` para operaciones internas relevantes que no sean controller, service o transformación.
+
+### Instrumentación HTTP
+
+TraceFlow instrumenta HTTP desde la capa de Node.js: **no necesitas plugins independientes** para NestJS, Express o Fastify.
+
+Cuando se utiliza `createTraceFlowHttpMiddleware`, la petición entrante se identifica automáticamente como nodo `http` y se relaciona con el controller instrumentado mediante `@Trace({ type: 'controller' })`.
+
+Si prefieres trabajar solo con decoradores:
 
 ```ts
 startTraceFlow({
@@ -146,197 +196,116 @@ startTraceFlow({
 });
 ```
 
-La instrumentación HTTP se realiza sobre la capa de Node.js, por lo que no es
-necesario registrar un plugin distinto para NestJS, Express o Fastify. Cuando se usa
-`createTraceFlowHttpMiddleware`, la petición entrante se marca internamente con el tipo
-de nodo `http` de forma automática, sin requerir decorarla en el código de tu aplicación,
-enlazándose directamente con el controller correspondiente (`@Trace({ type: 'controller' })`).
+## 🖥️ TraceFlow Studio
 
-## Visualizar trazas
+El kit agrupa la interfaz React/Vite compilada, el servidor local y sus endpoints. **No necesitas instalar `traceflow-studio` por separado.**
 
-Instala el kit como dependencia de desarrollo:
+### Comandos del CLI
 
-```bash
-npm install -D traceflow-kit
-```
+| Comando | Uso |
+| :-- | :-- |
+| `npx traceflow-kit studio` | Inicia el Studio local. |
+| `npx traceflow-kit studio --no-open` | No abre el navegador. |
+| `npx traceflow-kit studio --host 127.0.0.1 --port 4789` | Configura host y puerto. |
+| `npx traceflow-kit studio --debug` | Habilita el modo debug. |
 
-Añade un script:
+### API disponible
 
-```json
-{
-  "scripts": {
-    "traceflow:studio": "traceflow-kit studio"
-  }
-}
-```
+| Método | Endpoint | Propósito |
+| :-- | :-- | :-- |
+| `GET` | `/health` | Estado del servidor. |
+| `POST` | `/api/v1/spans/batch` | Recibir spans por lote. |
+| `GET` | `/api/v1/traces` | Listar trazas. |
+| `GET` | `/api/v1/traces/latest` | Consultar la traza más reciente. |
+| `GET` | `/api/v1/traces/:traceId` | Consultar una traza por ID. |
+| `DELETE` | `/api/v1/traces` | Eliminar las trazas almacenadas. |
+| `DELETE` | `/api/v1/traces/:traceId` | Eliminar una traza. |
+| `GET` | `/api/v1/events` | Stream de eventos SSE. |
 
-Inicia la API local y la interfaz:
-
-```bash
-npm run traceflow:studio
-```
-
-Por defecto:
+## 🏗️ Arquitectura
 
 ```text
-Studio:  http://127.0.0.1:4789
-Swagger: http://127.0.0.1:4789/docs
-OpenAPI: http://127.0.0.1:4789/docs-json
-Ingesta: http://127.0.0.1:4789/api/v1/spans/batch
+packages/
+├── traceflow/                      # Runtime independiente de frameworks
+│   └── src/
+│       ├── modules/
+│       │   ├── settings/           # Configuración y arranque OpenTelemetry
+│       │   └── traces/
+│       │       ├── normal/         # Decorador @Trace()
+│       │       └── shared/         # Contratos y funciones del decorador
+│       └── protocol.ts             # Fachada del protocolo público
+└── traceflow-kit/                  # Herramientas de desarrollo
+    └── studio/                     # Frontend React/Vite integrado
 ```
 
-Opciones del CLI:
+| Componente | Decisiones de diseño |
+| :-- | :-- |
+| **Runtime** | Sin dependencias de NestJS, Express ni Fastify. |
+| **Kit** | Utiliza NestJS sobre Fastify; `app.module.ts`, `app.controller.ts` y `app.service.ts` forman la raíz. |
+| **`core/` y `functions/`** | Configuración global y helpers reutilizables del kit. |
+| **`modules/traces/`** | Controller, service, módulo y store en memoria. |
+| **`TraceService`** | Centraliza validación, filtros, operaciones del store y stream SSE. Los controllers solo enrutan. |
+| **Persistencia** | En memoria; el kit no incluye Drizzle, PostgreSQL ni comandos de base de datos. |
 
-```bash
-npx traceflow-kit studio --no-open
-npx traceflow-kit studio --host 127.0.0.1 --port 4789
-npx traceflow-kit studio --debug
-```
+**Convenciones internas del runtime:** los contratos y utilidades siguen sufijos descriptivos como `.interface.ts`, `.type.ts` y `.function.ts`. Las funciones en archivos `.function.ts` no conservan estado ni constantes globales; dichos valores pertenecen a `.runtime.ts` o `.constant.ts`.
 
-`traceflow-kit` contiene los controladores, el almacenamiento en memoria, la
-validación del protocolo, Swagger y el servidor que sirve los assets compilados
-de `studio/`. No tienes que instalar `traceflow-studio` por separado.
+### Protocolo compartido
 
-Su código sigue una composición NestJS convencional: `app.module.ts`,
-`app.controller.ts` y `app.service.ts` forman la raíz; `core/` contiene las
-configuraciones globales; `functions/` contiene helpers reutilizables; y
-`modules/traces/` contiene el controller, service, módulo y store en memoria.
-El kit no incluye Drizzle, PostgreSQL ni comandos de base de datos.
-
-Sus controllers solo enrutan las peticiones; `TraceService` concentra la
-validación, filtros, operaciones del store y el stream SSE.
-
-## Protocolo compartido
-
-Las aplicaciones y herramientas pueden reutilizar los tipos publicados:
+Puedes usar los DTO públicos sin importar rutas internas:
 
 ```ts
 import type { TraceFlowSpanDto, TraceFlowTraceDto } from 'traceflow/protocol';
 ```
 
-`src/protocol.ts` es una fachada pública, no otro motor de trazabilidad. El
-nombre refleja el subpath estable `traceflow/protocol` y evita que los
-consumidores conozcan la estructura interna de `modules/`.
+`src/protocol.ts` es una **fachada pública** que respalda el subpath estable `traceflow/protocol`; no implementa un segundo motor de trazabilidad.
 
-## Desarrollo de este repositorio
+## 🛠️ Desarrollo del repositorio
 
-Instala todas las dependencias del workspace:
+| Acción | Comando |
+| :-- | :-- |
+| Instalar el workspace | `npm ci` |
+| Compilar runtime, kit y Studio | `npm run build` |
+| Ejecutar compiladores, API y Vite en paralelo | `npm run dev` |
+| Ejecutar validaciones | `npm run verify` |
+| Empaquetar runtime | `npm pack --workspace=traceflow` |
+| Empaquetar kit | `npm pack --workspace=traceflow-kit` |
 
-```bash
-npm ci
-```
+## 🔗 Consumir TraceFlow sin publicarlo en npm
 
-Compila el runtime, el kit y el frontend:
+Puedes probar el proyecto desde otra aplicación usando paquetes `.tgz` o enlaces simbólicos.
 
-```bash
-npm run build
-```
+### Opción A — paquetes `.tgz`
 
-Desarrolla compilador, API del kit y Vite en paralelo:
-
-```bash
-npm run dev
-```
-
-Ejecuta las validaciones:
-
-```bash
-npm run verify
-```
-
-Empaqueta cada distribución por separado:
-
-```bash
-npm pack --workspace=traceflow
-npm pack --workspace=traceflow-kit
-```
-
-## API del Studio
-
-- `GET /health`
-- `POST /api/v1/spans/batch`
-- `GET /api/v1/traces`
-- `GET /api/v1/traces/latest`
-- `GET /api/v1/traces/:traceId`
-- `DELETE /api/v1/traces`
-- `DELETE /api/v1/traces/:traceId`
-- `GET /api/v1/events`
-
-El Studio mantiene las trazas en memoria y está pensado para desarrollo local.
-No debe exponerse públicamente sin autenticación, TLS y controles de acceso.
-
-## Tutorial: desarrollo local y consumo sin publicar
-
-Este flujo permite que otro proyecto consuma una versión de TraceFlow que
-todavía no está publicada en npm.
-
-### 1. Levantar TraceFlow en desarrollo
-
-Clona el repositorio y entra en su carpeta:
+**En el repositorio de TraceFlow:**
 
 ```bash
 git clone <url-del-repositorio>
 cd traceflow
-```
-
-Instala las dependencias y genera la primera compilación:
-
-```bash
 npm ci
 npm run build
-```
-
-Para trabajar sobre el runtime, el kit y el Studio con recompilación automática,
-ejecuta:
-
-```bash
-npm run dev
-```
-
-Este comando mantiene en ejecución los compiladores del runtime y del kit, y el
-servidor de desarrollo de Vite. Déjalo abierto mientras uses el proyecto
-consumidor.
-
-### 2. Consumir una versión local desde otro proyecto
-
-Desde el repositorio de TraceFlow, crea los paquetes instalables:
-
-```bash
 npm pack --workspace=traceflow
 npm pack --workspace=traceflow-kit
 ```
 
-Se generarán dos archivos `.tgz` dentro de `packages/traceflow/` y
-`packages/traceflow-kit/`. En el proyecto consumidor, instala primero el runtime
-y después el kit:
+Los archivos `.tgz` se generan en `packages/traceflow/` y `packages/traceflow-kit/`.
+
+**En el proyecto consumidor:**
 
 ```bash
 npm install /ruta/absoluta/traceflow/packages/traceflow/traceflow-0.1.0.tgz
 npm install -D /ruta/absoluta/traceflow/packages/traceflow-kit/traceflow-kit-0.1.0.tgz
 ```
 
-El runtime se instala como dependencia normal porque contiene el código que
-instrumenta la aplicación. El kit se instala como dependencia de desarrollo
-porque únicamente levanta el Studio local.
+> [!IMPORTANT]
+> Los nombres `traceflow-0.1.0.tgz` y `traceflow-kit-0.1.0.tgz` son ejemplos: reemplázalos por los archivos y versiones que genere `npm pack`.
 
-Añade el script del Studio al `package.json` del proyecto consumidor:
-
-```json
-{
-  "scripts": {
-    "traceflow:studio": "traceflow-kit studio"
-  }
-}
-```
-
-Levanta el Studio en una terminal:
+Configura el script `traceflow:studio` indicado en [Inicio rápido](#-inicio-rápido) y levántalo en una terminal:
 
 ```bash
 npm run traceflow:studio
 ```
 
-En otra terminal, inicia la aplicación consumidora con su comando habitual. Su
-configuración debe apuntar al Studio local:
+En otra terminal, inicia tu aplicación, configurada con:
 
 ```ts
 import { startTraceFlow } from 'traceflow';
@@ -347,38 +316,48 @@ startTraceFlow({
 });
 ```
 
-Cuando cambies el código de TraceFlow, ejecuta de nuevo `npm run build` y vuelve
-a crear e instalar los paquetes `.tgz` para que el proyecto consumidor reciba
-los cambios.
+Si modificas el código de TraceFlow, **recompila, vuelve a empaquetar y reinstala** los `.tgz` para recibir los cambios.
 
-### 3. Enlace simbólico para cambios en vivo
+### Opción B — `npm link`
 
-Si necesitas que el proyecto consumidor use continuamente la copia local, puedes
-usar `npm link`. Primero compila el repositorio y registra ambos paquetes:
+Registra ambos paquetes desde el repositorio de TraceFlow:
 
 ```bash
 cd /ruta/absoluta/traceflow
 npm run build
+```
+```bash
 cd packages/traceflow
 npm link
+```
+```bash
 cd ../traceflow-kit
 npm link
 ```
 
-Después, enlázalos desde el proyecto consumidor:
+Comando para hacer todo al mismo tiempo
+
+```bash
+cd /ruta/absoluta/traceflow
+npm run dev
+```
+
+Enlázalos desde el consumidor:
 
 ```bash
 cd /ruta/absoluta/mi-proyecto
 npm link traceflow traceflow-kit
 ```
-
-Mantén `npm run dev` ejecutándose en el repositorio de TraceFlow para que los
-cambios se reflejen en `dist/`. Si el proyecto consumidor usa un lockfile para
-instalaciones reproducibles, elimina los enlaces antes de compartirlo y vuelve
-a instalar los paquetes `.tgz`:
+Desenlazar desde el consumidor:
 
 ```bash
+cd /ruta/absoluta/mi-proyecto
 npm unlink traceflow traceflow-kit
-npm install /ruta/absoluta/traceflow/packages/traceflow/traceflow-0.1.0.tgz
-npm install -D /ruta/absoluta/traceflow/packages/traceflow-kit/traceflow-kit-0.1.0.tgz
 ```
+
+
+<div align="center">
+
+**TraceFlow** · Instrumenta en tu aplicación. Explora en local.
+
+</div>
