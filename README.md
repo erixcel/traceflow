@@ -105,7 +105,7 @@ estáticos:
 import { Trace } from 'traceflow';
 
 export class PaginationFunction {
-  @Trace({ name: 'Crear paginación', type: 'method', labels: ['module'] })
+  @Trace({ name: 'Crear paginación', type: 'method' })
   static createPaginationMeta(total: number, page: number, limit: number) {
     const totalPages = Math.ceil(total / limit);
     return { total, page, limit, totalPages, hasNextPage: page < totalPages, hasPreviousPage: page > 1 };
@@ -264,3 +264,121 @@ npm pack --workspace=traceflow-kit
 
 El Studio mantiene las trazas en memoria y está pensado para desarrollo local.
 No debe exponerse públicamente sin autenticación, TLS y controles de acceso.
+
+## Tutorial: desarrollo local y consumo sin publicar
+
+Este flujo permite que otro proyecto consuma una versión de TraceFlow que
+todavía no está publicada en npm.
+
+### 1. Levantar TraceFlow en desarrollo
+
+Clona el repositorio y entra en su carpeta:
+
+```bash
+git clone <url-del-repositorio>
+cd traceflow
+```
+
+Instala las dependencias y genera la primera compilación:
+
+```bash
+npm ci
+npm run build
+```
+
+Para trabajar sobre el runtime, el kit y el Studio con recompilación automática,
+ejecuta:
+
+```bash
+npm run dev
+```
+
+Este comando mantiene en ejecución los compiladores del runtime y del kit, y el
+servidor de desarrollo de Vite. Déjalo abierto mientras uses el proyecto
+consumidor.
+
+### 2. Consumir una versión local desde otro proyecto
+
+Desde el repositorio de TraceFlow, crea los paquetes instalables:
+
+```bash
+npm pack --workspace=traceflow
+npm pack --workspace=traceflow-kit
+```
+
+Se generarán dos archivos `.tgz` dentro de `packages/traceflow/` y
+`packages/traceflow-kit/`. En el proyecto consumidor, instala primero el runtime
+y después el kit:
+
+```bash
+npm install /ruta/absoluta/traceflow/packages/traceflow/traceflow-0.1.0.tgz
+npm install -D /ruta/absoluta/traceflow/packages/traceflow-kit/traceflow-kit-0.1.0.tgz
+```
+
+El runtime se instala como dependencia normal porque contiene el código que
+instrumenta la aplicación. El kit se instala como dependencia de desarrollo
+porque únicamente levanta el Studio local.
+
+Añade el script del Studio al `package.json` del proyecto consumidor:
+
+```json
+{
+  "scripts": {
+    "traceflow:studio": "traceflow-kit studio"
+  }
+}
+```
+
+Levanta el Studio en una terminal:
+
+```bash
+npm run traceflow:studio
+```
+
+En otra terminal, inicia la aplicación consumidora con su comando habitual. Su
+configuración debe apuntar al Studio local:
+
+```ts
+import { startTraceFlow } from 'traceflow';
+
+startTraceFlow({
+  serviceName: 'mi-proyecto',
+  studioUrl: 'http://127.0.0.1:4789',
+});
+```
+
+Cuando cambies el código de TraceFlow, ejecuta de nuevo `npm run build` y vuelve
+a crear e instalar los paquetes `.tgz` para que el proyecto consumidor reciba
+los cambios.
+
+### 3. Enlace simbólico para cambios en vivo
+
+Si necesitas que el proyecto consumidor use continuamente la copia local, puedes
+usar `npm link`. Primero compila el repositorio y registra ambos paquetes:
+
+```bash
+cd /ruta/absoluta/traceflow
+npm run build
+cd packages/traceflow
+npm link
+cd ../traceflow-kit
+npm link
+```
+
+Después, enlázalos desde el proyecto consumidor:
+
+```bash
+cd /ruta/absoluta/mi-proyecto
+npm link traceflow traceflow-kit
+```
+
+Mantén `npm run dev` ejecutándose en el repositorio de TraceFlow para que los
+cambios se reflejen en `dist/`. Si el proyecto consumidor usa un lockfile para
+instalaciones reproducibles, elimina los enlaces antes de compartirlo y vuelve
+a instalar los paquetes `.tgz`:
+
+```bash
+npm unlink traceflow traceflow-kit
+npm install /ruta/absoluta/traceflow/packages/traceflow/traceflow-0.1.0.tgz
+npm install -D /ruta/absoluta/traceflow/packages/traceflow-kit/traceflow-kit-0.1.0.tgz
+```
